@@ -169,21 +169,24 @@ export const invitationService = {
 
       if (subscriptionData) {
         console.log('Creating notification for user:', userId);
-        // Use the RPC function instead of direct table insert
-        const { data: notificationData, error: notificationError } = await supabase.rpc(
-          'create_invitation_notification',
-          {
-            p_user_id: userId,
-            p_subscription_id: subscriptionId,
-            p_message: `You have been invited to join the ${subscriptionData.name} subscription`
-          }
-        );
+        const { data: notificationData, error: notificationError } = await supabase
+          .from('notifications')
+          .insert([
+            {
+              user_id: userId,
+              subscription_id: subscriptionId,
+              message: `You have been invited to join the ${subscriptionData.name} subscription`,
+              type: 'invite',
+              status: 'unread',
+            },
+          ])
+          .select();
 
         if (notificationError) {
           console.error('Error creating notification:', notificationError);
           // Continue anyway, as the member has been added
         } else {
-          console.log('Notification created successfully using RPC function');
+          console.log('Notification created successfully:', notificationData);
         }
       }
 
@@ -210,42 +213,57 @@ export const invitationService = {
     try {
       console.log('Getting members for subscription:', subscriptionId);
       
-      // Use the RPC function instead of direct table query
-      const { data, error } = await supabase.rpc(
-        'get_subscription_members',
-        {
-          p_subscription_id: subscriptionId
-        }
-      );
+      // First, get the subscription members
+      const { data: membersData, error: membersError } = await supabase
+        .from('subscription_members')
+        .select('user_id, status, joined_at')
+        .eq('subscription_id', subscriptionId);
 
-      if (error) {
-        console.error('Error getting subscription members:', error);
+      if (membersError) {
+        console.error('Error getting subscription members:', membersError);
         return { 
           success: false, 
-          error: error.message || 'Failed to get subscription members' 
+          error: membersError.message || 'Failed to get subscription members' 
         };
       }
 
-      // The RPC function returns a JSON object with success and data properties
-      if (data && data.success) {
-        console.log('Subscription members found:', data.data?.length || 0);
-        console.log('Members data:', data.data);
-        
-        return { 
-          success: true, 
-          data: data.data 
-        };
-      } else if (data && !data.success) {
-        console.error('RPC function returned error:', data.error);
-        return {
-          success: false,
-          error: data.error || 'Failed to get subscription members'
-        };
+      console.log('Subscription members found:', membersData?.length || 0);
+      
+      // If no members found, return empty array
+      if (!membersData || membersData.length === 0) {
+        return { success: true, data: [] };
       }
+
+      // Then, for each member, get the user details
+      const membersWithUserDetails = await Promise.all(
+        membersData.map(async (member) => {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('username, name')
+            .eq('user_id', member.user_id)
+            .single();
+          
+          if (userError) {
+            console.warn(`Could not fetch user details for ${member.user_id}:`, userError);
+            return { 
+              ...member, 
+              users: null 
+            };
+          }
+          
+          // Return in the same format as the original join would have
+          return { 
+            ...member, 
+            users: userData 
+          };
+        })
+      );
+
+      console.log('Members with user details:', membersWithUserDetails);
       
       return { 
-        success: false, 
-        error: 'Unexpected response format from RPC function' 
+        success: true, 
+        data: membersWithUserDetails 
       };
     } catch (error) {
       console.error('Error in getSubscriptionMembers:', error);
@@ -266,25 +284,25 @@ export const invitationService = {
   updateInvitationStatus: async (subscriptionId: string, userId: string, status: 'accepted' | 'rejected') => {
     try {
       if (status === 'accepted') {
-        // Use the RPC function instead of direct table update
-        console.log('Using RPC function to accept invitation:', subscriptionId, userId);
-        const { data, error } = await supabase.rpc(
-          'accept_subscription_invitation',
-          {
-            p_subscription_id: subscriptionId,
-            p_user_id: userId
-          }
-        );
+        // Update the member status and set joined_at to current time
+        const { data, error } = await supabase
+          .from('subscription_members')
+          .update({
+            status: 'accepted',
+            joined_at: new Date().toISOString(),
+          })
+          .eq('subscription_id', subscriptionId)
+          .eq('user_id', userId)
+          .select();
 
         if (error) {
-          console.error('Error accepting invitation with RPC:', error);
+          console.error('Error accepting invitation:', error);
           return { 
             success: false, 
             error: error.message || 'Failed to accept invitation' 
           };
         }
 
-        console.log('Invitation accepted successfully with RPC:', data);
         return { 
           success: true, 
           data 
@@ -311,160 +329,6 @@ export const invitationService = {
       }
     } catch (error) {
       console.error('Error in updateInvitationStatus:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'An unknown error occurred' 
-      };
-    }
-  },
-
-  /**
-   * Remove a member from a subscription (admin only)
-   * @param subscriptionId - The ID of the subscription
-   * @param userId - The ID of the user to remove
-   * @returns A promise that resolves to the result of the operation
-   */
-  removeMember: async (subscriptionId: string, userId: string) => {
-    try {
-      // First, check if the subscription exists and the current user is the admin
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return { 
-          success: false, 
-          error: 'User not authenticated' 
-        };
-      }
-      
-      // Get the subscription to check if the current user is the admin
-      const { data: subscription, error: subscriptionError } = await supabase
-        .from('subscriptions')
-        .select('admin_id')
-        .eq('subscription_id', subscriptionId)
-        .single();
-        
-      if (subscriptionError) {
-        console.error('Error getting subscription:', subscriptionError);
-        return { 
-          success: false, 
-          error: subscriptionError.message || 'Failed to get subscription' 
-        };
-      }
-      
-      // Check if the current user is the admin
-      if (subscription.admin_id !== user.id) {
-        return { 
-          success: false, 
-          error: 'Only the subscription admin can remove members' 
-        };
-      }
-      
-      // Remove the member from the subscription
-      const { error } = await supabase
-        .from('subscription_members')
-        .delete()
-        .eq('subscription_id', subscriptionId)
-        .eq('user_id', userId);
-        
-      if (error) {
-        console.error('Error removing member:', error);
-        return { 
-          success: false, 
-          error: error.message || 'Failed to remove member' 
-        };
-      }
-      
-      // Create a notification for the removed user
-      const { data: notificationData, error: notificationError } = await supabase
-        .from('notifications')
-        .insert([
-          {
-            user_id: userId,
-            subscription_id: subscriptionId,
-            message: `You have been removed from the subscription`,
-            type: 'info',
-            status: 'unread',
-          },
-        ])
-        .select();
-        
-      if (notificationError) {
-        console.error('Error creating notification:', notificationError);
-        // Continue anyway as the member has been removed
-      }
-      
-      return { 
-        success: true 
-      };
-    } catch (error) {
-      console.error('Error in removeMember:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'An unknown error occurred' 
-      };
-    }
-  },
-
-  /**
-   * Leave a subscription (for members)
-   * @param subscriptionId - The ID of the subscription
-   * @returns A promise that resolves to the result of the operation
-   */
-  leaveSubscription: async (subscriptionId: string) => {
-    try {
-      // Get the current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return { 
-          success: false, 
-          error: 'User not authenticated' 
-        };
-      }
-      
-      // Check if the user is the admin of the subscription
-      const { data: subscription, error: subscriptionError } = await supabase
-        .from('subscriptions')
-        .select('admin_id')
-        .eq('subscription_id', subscriptionId)
-        .single();
-        
-      if (subscriptionError) {
-        console.error('Error getting subscription:', subscriptionError);
-        return { 
-          success: false, 
-          error: subscriptionError.message || 'Failed to get subscription' 
-        };
-      }
-      
-      // If the user is the admin, they can't leave the subscription
-      if (subscription.admin_id === user.id) {
-        return { 
-          success: false, 
-          error: 'Subscription admins cannot leave. You must delete the subscription or transfer ownership.' 
-        };
-      }
-      
-      // Remove the user from the subscription
-      const { error } = await supabase
-        .from('subscription_members')
-        .delete()
-        .eq('subscription_id', subscriptionId)
-        .eq('user_id', user.id);
-        
-      if (error) {
-        console.error('Error leaving subscription:', error);
-        return { 
-          success: false, 
-          error: error.message || 'Failed to leave subscription' 
-        };
-      }
-      
-      return { 
-        success: true 
-      };
-    } catch (error) {
-      console.error('Error in leaveSubscription:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'An unknown error occurred' 

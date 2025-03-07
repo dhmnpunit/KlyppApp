@@ -42,7 +42,6 @@ export const NotificationsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     if (!user) {
@@ -73,26 +72,51 @@ export const NotificationsScreen = () => {
         return;
       }
       
-      const { data, error } = await supabase
+      const { data: notificationsData, error } = await supabase
         .from('notifications')
-        .select(`
-          *,
-          subscription:subscription_id (
-            name,
-            cost,
-            renewal_frequency
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
       if (error) {
         throw error;
-      } else {
-        console.log('Notifications fetched:', data?.length || 0);
-        console.log('Notification data:', data);
-        setNotifications(data || []);
       }
+
+      // If no notifications, set empty array and return
+      if (!notificationsData || notificationsData.length === 0) {
+        setNotifications([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      // Fetch subscription details for each notification
+      const notificationsWithSubscriptions = await Promise.all(
+        notificationsData.map(async (notification) => {
+          // Skip if no subscription_id
+          if (!notification.subscription_id) {
+            return notification;
+          }
+
+          const { data: subscriptionData, error: subscriptionError } = await supabase
+            .from('subscriptions')
+            .select('name, cost, renewal_frequency')
+            .eq('subscription_id', notification.subscription_id)
+            .single();
+          
+          if (subscriptionError) {
+            console.warn(`Error fetching subscription ${notification.subscription_id}:`, subscriptionError);
+            return notification;
+          }
+          
+          return {
+            ...notification,
+            subscription: subscriptionData
+          };
+        })
+      );
+      
+      setNotifications(notificationsWithSubscriptions);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch notifications');
@@ -190,12 +214,7 @@ export const NotificationsScreen = () => {
   const handleAcceptInvitation = async (notification: Notification) => {
     if (!user) return;
     
-    // Set the processing state to show loading indicator
-    setProcessingInvitation(notification.notification_id);
-    
     try {
-      console.log('Accepting invitation for subscription:', notification.subscription_id);
-      
       // Update the invitation status
       const result = await invitationService.updateInvitationStatus(
         notification.subscription_id,
@@ -203,10 +222,12 @@ export const NotificationsScreen = () => {
         'accepted'
       );
       
-      console.log('Invitation acceptance result:', result);
-      
       if (result.success) {
-        // No need to manually update notification status as the RPC function handles it
+        // Mark notification as read
+        await supabase
+          .from('notifications')
+          .update({ status: 'read' })
+          .eq('notification_id', notification.notification_id);
         
         // Refresh notifications
         fetchNotifications();
@@ -220,30 +241,20 @@ export const NotificationsScreen = () => {
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      Alert.alert('Error', 'An unexpected error occurred while accepting the invitation.');
-    } finally {
-      // Clear the processing state
-      setProcessingInvitation(null);
+      Alert.alert('Error', 'An unexpected error occurred');
     }
   };
 
   const handleRejectInvitation = async (notification: Notification) => {
     if (!user) return;
     
-    // Set the processing state to show loading indicator
-    setProcessingInvitation(notification.notification_id);
-    
     try {
-      console.log('Rejecting invitation for subscription:', notification.subscription_id);
-      
       // Update the invitation status
       const result = await invitationService.updateInvitationStatus(
         notification.subscription_id,
         user.id,
         'rejected'
       );
-      
-      console.log('Invitation rejection result:', result);
       
       if (result.success) {
         // Mark notification as read
@@ -264,10 +275,7 @@ export const NotificationsScreen = () => {
       }
     } catch (error) {
       console.error('Error rejecting invitation:', error);
-      Alert.alert('Error', 'An unexpected error occurred while rejecting the invitation.');
-    } finally {
-      // Clear the processing state
-      setProcessingInvitation(null);
+      Alert.alert('Error', 'An unexpected error occurred');
     }
   };
 
@@ -289,7 +297,6 @@ export const NotificationsScreen = () => {
   const renderNotificationItem = ({ item }: { item: Notification }) => {
     const isUnread = item.status === 'unread';
     const isInvite = item.type === 'invite';
-    const isProcessing = processingInvitation === item.notification_id;
     
     return (
       <View style={[styles.notificationItem, isUnread && styles.unreadItem]}>
@@ -303,21 +310,15 @@ export const NotificationsScreen = () => {
         {isInvite && isUnread ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={[styles.acceptButton, isProcessing && styles.disabledButton]}
+              style={styles.acceptButton}
               onPress={() => handleAcceptInvitation(item)}
-              disabled={isProcessing}
             >
-              {isProcessing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.acceptButtonText}>Accept</Text>
-              )}
+              <Text style={styles.acceptButtonText}>Accept</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.rejectButton, isProcessing && styles.disabledButton]}
+              style={styles.rejectButton}
               onPress={() => handleRejectInvitation(item)}
-              disabled={isProcessing}
             >
               <Text style={styles.rejectButtonText}>Reject</Text>
             </TouchableOpacity>
@@ -562,8 +563,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
-  },
-  disabledButton: {
-    opacity: 0.6,
   },
 }); 

@@ -69,13 +69,9 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       }
 
       // Fetch subscriptions where the user is a member (not admin)
-      const { data: memberSubscriptions, error: memberError } = await supabase
+      const { data: membershipData, error: memberError } = await supabase
         .from('subscription_members')
-        .select(`
-          subscription_id,
-          status,
-          subscriptions:subscription_id (*)
-        `)
+        .select('subscription_id, status')
         .eq('user_id', user.id)
         .eq('status', 'accepted');
 
@@ -90,20 +86,43 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
           });
           return;
         }
-        throw memberError;
+        console.error('Error fetching member subscriptions:', memberError);
+        set({ error: memberError.message, loading: false });
+        return;
       }
 
-      // Process member subscriptions to extract the subscription data
-      const sharedSubscriptions = memberSubscriptions
-        ? memberSubscriptions
-            .filter(item => item.subscriptions) // Filter out any null subscriptions
-            .map(item => item.subscriptions as unknown as Subscription)
-        : [];
+      // If no memberships, just use owned subscriptions
+      if (!membershipData || membershipData.length === 0) {
+        set({ 
+          subscriptions: ownedSubscriptions || [],
+          loading: false 
+        });
+        return;
+      }
+
+      // Fetch the actual subscription details for each membership
+      const memberSubscriptionsPromises = membershipData.map(async (membership) => {
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('subscription_id', membership.subscription_id)
+          .single();
+        
+        if (subscriptionError) {
+          console.warn(`Error fetching subscription ${membership.subscription_id}:`, subscriptionError);
+          return null;
+        }
+        
+        return subscriptionData;
+      });
+
+      const memberSubscriptionsResults = await Promise.all(memberSubscriptionsPromises);
+      const memberSubscriptions = memberSubscriptionsResults.filter(Boolean) as Subscription[];
 
       // Combine owned and shared subscriptions
       const allSubscriptions = [
         ...(ownedSubscriptions || []),
-        ...sharedSubscriptions
+        ...memberSubscriptions
       ];
 
       // Remove duplicates (in case user is both admin and member)
