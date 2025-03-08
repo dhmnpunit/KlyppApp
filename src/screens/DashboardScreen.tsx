@@ -387,7 +387,7 @@ export const DashboardScreen = () => {
   return (
     <View style={styles.container}>
       {/* Header with profile and settings */}
-      <View style={styles.header}>
+      <View style={[styles.header, Platform.OS === 'android' && styles.headerAndroid]}>
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
             <Text style={styles.profileInitial}>
@@ -617,11 +617,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 10,
     paddingBottom: 16,
-    backgroundColor: THEME.card,
+    height: Platform.OS === 'ios' ? 90 : 105,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
+    zIndex: 10,
+  },
+  headerAndroid: {
+    paddingTop: 45,
+    elevation: 0,
   },
   profileSection: {
     flexDirection: 'row',
@@ -635,6 +641,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    ...(Platform.OS === 'ios' 
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }
+      : {
+          elevation: 0,
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.2)',
+          overflow: 'hidden',
+        }
+    )
   },
   profileInitial: {
     fontFamily: fontStyles.bold,
@@ -648,7 +668,6 @@ const styles = StyleSheet.create({
     fontFamily: fontStyles.semiBold,
     fontSize: 16,
     color: THEME.text.primary,
-    marginBottom: 2,
   },
   walletAddressContainer: {
     flexDirection: 'row',
@@ -663,35 +682,26 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   settingsIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    // Use platform-specific styling
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: {
-        // Remove elevation which causes the shadow
-        elevation: 0,
-        // Use a subtle border instead
-        borderWidth: 0.5,
-        borderColor: 'rgba(0,0,0,0.05)',
-        overflow: 'hidden',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      }
-    })
+    ...(Platform.OS === 'ios' 
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }
+      : {
+          elevation: 0,
+          borderWidth: 0.5,
+          borderColor: 'rgba(0,0,0,0.05)',
+          overflow: 'hidden',
+        }
+    )
   },
   scrollContainer: {
     flex: 1,
