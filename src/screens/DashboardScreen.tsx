@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   ActivityIndicator,
   Modal,
-  ScrollView
+  ScrollView,
+  Dimensions
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,6 +16,7 @@ import type { MainStackParamList } from '../navigation/AppNavigator';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import { useAuthStore } from '../store/authStore';
 import { Subscription } from '../store/subscriptionStore';
+import { DonutChart } from '../components/DonutChart';
 
 type DashboardScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
@@ -52,6 +54,64 @@ export const DashboardScreen = () => {
   const [sortOption, setSortOption] = useState('name-asc');
   const [filteredSubscriptions, setFilteredSubscriptions] = useState<Subscription[]>([]);
   const [showSortModal, setShowSortModal] = useState(false);
+  const [categoryData, setCategoryData] = useState<any[]>([]);
+  
+  // Screen width for the chart
+  const screenWidth = Dimensions.get('window').width - 32; // Full width minus padding
+
+  // Colors for the pie chart
+  const chartColors = [
+    '#2E4053', // Dark blue
+    '#3498DB', // Blue
+    '#1ABC9C', // Teal
+    '#F1C40F', // Yellow
+    '#E67E22', // Orange
+    '#E74C3C', // Red
+    '#9B59B6', // Purple
+    '#27AE60', // Green
+    '#95A5A6', // Gray
+  ];
+
+  // Calculate spending by category
+  const calculateCategorySpending = (subs: Subscription[]) => {
+    const categories: { [key: string]: number } = {};
+    
+    subs.forEach(sub => {
+      const category = sub.category || 'Other';
+      
+      // Convert all costs to monthly for consistency
+      let monthlyCost = sub.cost;
+      if (sub.renewal_frequency === 'yearly') {
+        monthlyCost = sub.cost / 12;
+      } else if (sub.renewal_frequency === 'quarterly') {
+        monthlyCost = sub.cost / 3;
+      } else if (sub.renewal_frequency === 'weekly') {
+        monthlyCost = sub.cost * 4.33; // Average weeks in a month
+      } else if (sub.renewal_frequency === 'daily') {
+        monthlyCost = sub.cost * 30; // Average days in a month
+      }
+      
+      if (categories[category]) {
+        categories[category] += monthlyCost;
+      } else {
+        categories[category] = monthlyCost;
+      }
+    });
+    
+    // Convert to chart data format
+    const data = Object.keys(categories).map((category, index) => {
+      return {
+        name: category,
+        cost: parseFloat(categories[category].toFixed(2)),
+        color: chartColors[index % chartColors.length],
+        legendFontColor: '#333',
+        legendFontSize: 12
+      };
+    });
+    
+    // Sort by cost (highest first)
+    return data.sort((a, b) => b.cost - a.cost);
+  };
 
   useEffect(() => {
     // Fetch subscriptions when the component mounts
@@ -106,9 +166,14 @@ export const DashboardScreen = () => {
       }, 0);
       
       setTotalCost(total);
+      
+      // Calculate category spending data for the pie chart
+      const categorySpendingData = calculateCategorySpending(subscriptions);
+      setCategoryData(categorySpendingData);
     } else {
       setFilteredSubscriptions([]);
       setTotalCost(0);
+      setCategoryData([]);
     }
   }, [subscriptions, selectedCategory, sortOption]);
 
@@ -140,7 +205,7 @@ export const DashboardScreen = () => {
       </View>
       
       {item.is_shared && (
-        <View style={styles.sharedBadge}>
+        <View style={styles.subscriptionSharedBadge}>
           <Text style={styles.sharedText}>Shared</Text>
         </View>
       )}
@@ -249,14 +314,32 @@ export const DashboardScreen = () => {
         </View>
       </View>
       
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Monthly Spending</Text>
-        <Text style={styles.summaryAmount}>${totalCost.toFixed(2)}</Text>
-        <Text style={styles.summarySubtitle}>
-          {filteredSubscriptions.length} active subscription{filteredSubscriptions.length !== 1 ? 's' : ''}
-          {selectedCategory !== 'All' ? ` in ${selectedCategory}` : ''}
-        </Text>
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Monthly Spending</Text>
+          <Text style={styles.summaryAmount}>${totalCost.toFixed(2)}</Text>
+          <Text style={styles.summarySubtitle}>
+            {selectedCategory !== 'All' ? `in ${selectedCategory}` : ''}
+          </Text>
+        </View>
+        
+        <View style={styles.activeSubscriptionsCard}>
+          <Text style={styles.activeSubscriptionsTitle}>Active Subscriptions</Text>
+          <Text style={styles.activeSubscriptionsCount}>{filteredSubscriptions.length}</Text>
+          <View style={styles.sharedSubscriptionsContainer}>
+            <View style={styles.sharedBadge}>
+              <Text style={styles.sharedBadgeText}>
+                {filteredSubscriptions.filter(sub => sub.is_shared).length} Shared
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
+      
+      {/* Spending by Category Chart */}
+      {categoryData.length > 0 && (
+        <DonutChart data={categoryData} />
+      )}
       
       {renderCategoryFilter()}
       
@@ -361,11 +444,17 @@ const styles = StyleSheet.create({
     color: '#008CFF',
     fontSize: 16,
   },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   summaryCard: {
     backgroundColor: '#008CFF',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 16,
+    flex: 1,
+    marginRight: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -386,6 +475,44 @@ const styles = StyleSheet.create({
   summarySubtitle: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 14,
+  },
+  activeSubscriptionsCard: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 20,
+    flex: 1,
+    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  activeSubscriptionsTitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  activeSubscriptionsCount: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  sharedSubscriptionsContainer: {
+    marginTop: 8,
+  },
+  sharedBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  sharedBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   categoryFilterWrapper: {
     marginTop: 8,
@@ -461,7 +588,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  sharedBadge: {
+  subscriptionSharedBadge: {
     position: 'absolute',
     top: 16,
     right: 16,
