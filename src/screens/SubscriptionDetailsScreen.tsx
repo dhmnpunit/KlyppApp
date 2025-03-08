@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
   Share,
   TextInput,
-  Modal
+  Modal,
+  Platform
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +20,23 @@ import { useAuthStore } from '../store/authStore';
 import { supabase } from '../services/supabase';
 import { invitationService } from '../services/invitationService';
 import { useAlert } from '../context/AlertContext';
+import { Ionicons } from '@expo/vector-icons';
+import { fontStyles, colors } from '../utils/globalStyles';
+
+// Define theme colors consistent with the app
+const THEME = {
+  primary: colors.primary,
+  primaryLight: 'rgba(132, 63, 222, 0.08)', // Lighter purple background
+  primaryDark: '#6A32B2', // Darker shade of #843FDE
+  text: {
+    primary: '#000000',
+    secondary: '#444444',
+    tertiary: '#888888'
+  },
+  background: '#F2F3F5', // Slightly darker background
+  card: '#FFFFFF',
+  border: '#F0F0F0'
+};
 
 type SubscriptionDetailsScreenNavigationProp = NativeStackNavigationProp<
   MainStackParamList,
@@ -83,6 +101,11 @@ export const SubscriptionDetailsScreen = () => {
 
   // Get current user ID directly from Supabase
   useEffect(() => {
+    // Hide the default navigation header
+    navigation.setOptions({
+      headerShown: false,
+    });
+
     const getCurrentUser = async () => {
       try {
         const { data, error } = await supabase.auth.getUser();
@@ -106,7 +129,7 @@ export const SubscriptionDetailsScreen = () => {
     };
 
     getCurrentUser();
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
     // Get subscription details
@@ -183,17 +206,48 @@ export const SubscriptionDetailsScreen = () => {
     }
   };
 
+  // Helper function to format currency
+  const formatCurrency = (amount: number) => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2
+      }).format(amount);
+    } catch (error) {
+      console.error('Error formatting currency:', error);
+      return `$${amount.toFixed(2)}`;
+    }
+  };
+  
+  // Helper function to format date
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    try {
+      const date = new Date(dateString);
+      return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }).format(date);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return dateString;
+    }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
+  // Calculate annual cost for non-yearly subscriptions
+  const calculateAnnualCost = (subscription: Subscription) => {
+    const { cost, renewal_frequency } = subscription;
+    switch (renewal_frequency) {
+      case 'monthly':
+        return cost * 12;
+      case 'quarterly':
+        return cost * 4;
+      case 'yearly':
+        return cost;
+      default:
+        return cost;
+    }
   };
 
   const handleInviteUser = async () => {
@@ -358,7 +412,7 @@ export const SubscriptionDetailsScreen = () => {
       transparent={true}
       onRequestClose={() => setShowInviteModal(false)}
     >
-      <View style={styles.modalOverlay}>
+      <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Invite User</Text>
           
@@ -376,24 +430,24 @@ export const SubscriptionDetailsScreen = () => {
             Make sure the username exists in the system.
           </Text>
           
-          <View style={styles.modalButtons}>
+          <View style={styles.modalButtonContainer}>
             <TouchableOpacity
-              style={styles.cancelButton}
+              style={styles.modalCancelButton}
               onPress={() => setShowInviteModal(false)}
               disabled={inviteLoading}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.inviteButton}
+              style={styles.modalSubmitButton}
               onPress={handleInviteUser}
               disabled={inviteLoading}
             >
               {inviteLoading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.inviteButtonText}>Invite</Text>
+                <Text style={styles.modalSubmitButtonText}>Invite</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -434,7 +488,7 @@ export const SubscriptionDetailsScreen = () => {
     if (membersLoading) {
       return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#008CFF" />
+          <ActivityIndicator size="small" color={THEME.primary} />
           <Text style={styles.loadingText}>Loading members...</Text>
         </View>
       );
@@ -442,7 +496,10 @@ export const SubscriptionDetailsScreen = () => {
 
     if (members.length === 0) {
       return (
-        <Text style={styles.noMembersText}>No members yet</Text>
+        <View style={styles.emptyMembersContainer}>
+          <Ionicons name="people-outline" size={24} color={THEME.text.tertiary} />
+          <Text style={styles.noMembersText}>No members yet</Text>
+        </View>
       );
     }
 
@@ -472,6 +529,11 @@ export const SubscriptionDetailsScreen = () => {
                 {member.isAdmin ? 'Admin' : member.status === 'accepted' ? 'Member' : 'Pending'}
               </Text>
             </View>
+            {isCurrentUserAdmin && !member.isAdmin && (
+              <TouchableOpacity style={styles.memberActionButton}>
+                <Ionicons name="ellipsis-vertical" size={20} color={THEME.text.tertiary} />
+              </TouchableOpacity>
+            )}
           </View>
         ))}
       </View>
@@ -582,8 +644,10 @@ export const SubscriptionDetailsScreen = () => {
   if (loading || subscriptionLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008CFF" />
-        <Text style={styles.loadingText}>Loading subscription details...</Text>
+        <View style={styles.loadingContent}>
+          <ActivityIndicator size="large" color={THEME.primary} />
+          <Text style={styles.loadingText}>Loading subscription details...</Text>
+        </View>
       </View>
     );
   }
@@ -591,20 +655,28 @@ export const SubscriptionDetailsScreen = () => {
   if (error || subscriptionError) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Error: {error || subscriptionError}</Text>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={handleRefresh}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
+        <View style={styles.errorContent}>
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="alert-circle-outline" size={32} color="#f44336" />
+          </View>
+          <Text style={styles.errorTitle}>Error Loading Subscription</Text>
+          <Text style={styles.errorText}>{error || subscriptionError}</Text>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, { marginHorizontal: 8 }]}
+              onPress={handleRefresh}
+            >
+              <Ionicons name="refresh-outline" size={18} color={THEME.text.secondary} style={styles.buttonIcon} />
+              <Text style={styles.actionButtonText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { marginHorizontal: 8 }]}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back-outline" size={18} color={THEME.text.secondary} style={styles.buttonIcon} />
+              <Text style={styles.actionButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -613,13 +685,20 @@ export const SubscriptionDetailsScreen = () => {
   if (!subscription) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Subscription not found</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <View style={styles.errorContent}>
+          <View style={styles.errorIconContainer}>
+            <Ionicons name="search-outline" size={32} color={THEME.text.tertiary} />
+          </View>
+          <Text style={styles.errorTitle}>Subscription Not Found</Text>
+          <Text style={styles.errorText}>The subscription you're looking for could not be found.</Text>
+          <TouchableOpacity
+            style={[styles.actionButton, { marginTop: 12 }]}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back-outline" size={18} color={THEME.text.secondary} style={styles.buttonIcon} />
+            <Text style={styles.actionButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -638,26 +717,42 @@ export const SubscriptionDetailsScreen = () => {
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
+          accessible={true}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
         >
-          <Text style={styles.backButtonText}>Back</Text>
+          <Ionicons name="arrow-back" size={24} color={THEME.text.primary} />
         </TouchableOpacity>
+        
+        <Text style={styles.headerTitle} numberOfLines={1}>{subscription.name}</Text>
         
         <TouchableOpacity 
           style={styles.refreshButton}
           onPress={handleRefresh}
+          accessible={true}
+          accessibilityLabel="Refresh subscription details"
+          accessibilityRole="button"
         >
-          <Text style={styles.refreshButtonText}>Refresh</Text>
+          <Ionicons name="refresh" size={24} color={THEME.text.primary} />
         </TouchableOpacity>
       </View>
       
-      <Text style={styles.title}>{subscription.name}</Text>
-      
       <View style={styles.card}>
-        <View style={styles.costContainer}>
-          <Text style={styles.costLabel}>Cost</Text>
-          <Text style={styles.costValue}>
-            {formatCurrency(subscription.cost)}/{subscription.renewal_frequency}
-          </Text>
+        <View style={styles.costSection}>
+          <View style={styles.costHeader}>
+            <Text style={styles.costLabel}>Cost</Text>
+            <View style={styles.frequencyBadge}>
+              <Text style={styles.frequencyText}>{subscription.renewal_frequency}</Text>
+            </View>
+          </View>
+          <Text style={styles.costValue}>{formatCurrency(subscription.cost)}</Text>
+          {subscription.renewal_frequency !== 'yearly' && (
+            <View style={styles.annualCostContainer}>
+              <Text style={styles.annualCostText}>
+                {formatCurrency(calculateAnnualCost(subscription))} per year
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.detailRow}>
@@ -677,12 +772,26 @@ export const SubscriptionDetailsScreen = () => {
 
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Auto-Renews</Text>
-          <Text style={styles.detailValue}>{subscription.auto_renews ? 'Yes' : 'No'}</Text>
+          <Text style={styles.detailValue}>
+            {subscription.auto_renews ? (
+              <View style={styles.statusContainer}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>Yes</Text>
+              </View>
+            ) : 'No'}
+          </Text>
         </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Shared</Text>
-          <Text style={styles.detailValue}>{subscription.is_shared ? 'Yes' : 'No'}</Text>
+          <Text style={styles.detailValue}>
+            {subscription.is_shared ? (
+              <View style={styles.statusContainer}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>Yes</Text>
+              </View>
+            ) : 'No'}
+          </Text>
         </View>
 
         {subscription.is_shared && subscription.max_members && (
@@ -702,7 +811,8 @@ export const SubscriptionDetailsScreen = () => {
                 style={styles.addMemberButton}
                 onPress={() => setShowInviteModal(true)}
               >
-                <Text style={styles.addMemberButtonText}>+ Invite</Text>
+                <Ionicons name="person-add" size={16} color="#FFFFFF" style={styles.buttonIcon} />
+                <Text style={styles.addMemberButtonText}>Invite</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -722,6 +832,7 @@ export const SubscriptionDetailsScreen = () => {
                   style={styles.editButton}
                   onPress={() => navigation.navigate('EditSubscription', { subscriptionId })}
                 >
+                  <Ionicons name="create-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
                   <Text style={styles.editButtonText}>Edit Subscription</Text>
                 </TouchableOpacity>
 
@@ -730,6 +841,7 @@ export const SubscriptionDetailsScreen = () => {
                     style={[styles.shareButton, { marginTop: 12 }]}
                     onPress={handleConvertToShared}
                   >
+                    <Ionicons name="people-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
                     <Text style={styles.shareButtonText}>Convert to Shared</Text>
                   </TouchableOpacity>
                 )}
@@ -741,6 +853,7 @@ export const SubscriptionDetailsScreen = () => {
                     showDeleteConfirmation();
                   }}
                 >
+                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
                   <Text style={styles.deleteButtonText}>Delete Subscription</Text>
                 </TouchableOpacity>
                 
@@ -751,6 +864,7 @@ export const SubscriptionDetailsScreen = () => {
                     fetchAllUsers();
                   }}
                 >
+                  <Ionicons name="code-outline" size={20} color={THEME.text.secondary} style={styles.buttonIcon} />
                   <Text style={styles.actionButtonText}>Show Debug Info</Text>
                 </TouchableOpacity>
               </View>
@@ -766,6 +880,7 @@ export const SubscriptionDetailsScreen = () => {
           style={[styles.actionButton, { marginTop: 12 }]}
           onPress={handleShareSubscription}
         >
+          <Ionicons name="share-social-outline" size={20} color={THEME.text.secondary} style={styles.buttonIcon} />
           <Text style={styles.actionButtonText}>Share via Message</Text>
         </TouchableOpacity>
       </View>
@@ -779,249 +894,344 @@ export const SubscriptionDetailsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: THEME.background,
   },
   header: {
-    padding: 16,
-    paddingTop: 60,
-    backgroundColor: '#fff',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 16,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: THEME.border,
   },
   backButton: {
-    marginBottom: 8,
+    padding: 8,
   },
-  backButtonText: {
-    color: '#008CFF',
-    fontSize: 16,
+  headerTitle: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 18,
+    color: THEME.text.primary,
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  refreshButton: {
+    padding: 8,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: THEME.card,
     borderRadius: 12,
     padding: 16,
     margin: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 0,
+      }
+    })
   },
-  costContainer: {
+  costSection: {
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    ...Platform.select({
+      ios: {
+        shadowColor: THEME.text.tertiary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  costHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   costLabel: {
+    fontFamily: fontStyles.regular,
     fontSize: 14,
-    color: '#666',
+    color: THEME.text.tertiary,
+  },
+  frequencyBadge: {
+    backgroundColor: THEME.primaryLight,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  frequencyText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: THEME.primary,
   },
   costValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#008CFF',
+    fontFamily: fontStyles.semiBold,
+    fontSize: 32,
+    color: THEME.text.primary,
+    marginVertical: 4,
+  },
+  annualCostContainer: {
+    marginTop: 8,
+  },
+  annualCostText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: THEME.text.secondary,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: THEME.border,
   },
   detailLabel: {
+    fontFamily: fontStyles.regular,
     fontSize: 16,
-    color: '#666',
+    color: THEME.text.secondary,
   },
   detailValue: {
+    fontFamily: fontStyles.medium,
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    color: THEME.text.primary,
   },
   sectionTitle: {
+    fontFamily: fontStyles.semiBold,
     fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    color: THEME.text.primary,
     marginBottom: 16,
   },
   emptyText: {
+    fontFamily: fontStyles.regular,
     fontSize: 14,
-    color: '#666',
+    color: THEME.text.tertiary,
     fontStyle: 'italic',
     marginBottom: 16,
   },
-  shareButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  shareButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  actionContainer: {
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 32,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
   editButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
+    backgroundColor: THEME.primary,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 12,
   },
   editButtonText: {
-    color: '#fff',
+    fontFamily: fontStyles.semiBold,
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  shareButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  shareButtonText: {
+    fontFamily: fontStyles.semiBold,
+    color: '#FFFFFF',
+    fontSize: 16,
   },
   deleteButton: {
     backgroundColor: '#f44336',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   deleteButtonText: {
-    color: '#fff',
+    fontFamily: fontStyles.semiBold,
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  actionButton: {
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: THEME.border,
+  },
+  actionButtonText: {
+    fontFamily: fontStyles.medium,
+    color: THEME.text.secondary,
+    fontSize: 16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: THEME.background,
+    padding: 20,
+  },
+  loadingContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
+    fontFamily: fontStyles.medium,
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: THEME.text.secondary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: THEME.background,
+    padding: 20,
+  },
+  errorContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorIconContainer: {
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 18,
+    color: THEME.text.primary,
+    marginBottom: 8,
   },
   errorText: {
+    fontFamily: fontStyles.medium,
     fontSize: 16,
-    color: '#f44336',
-    marginBottom: 16,
+    color: THEME.text.secondary,
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   membersSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
+    margin: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  addMemberButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  addMemberButtonText: {
-    color: '#008CFF',
-    fontSize: 14,
-    fontWeight: '500',
+    marginBottom: 16,
   },
   membersContainer: {
-    marginBottom: 8,
+    backgroundColor: THEME.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 0,
+      }
+    })
   },
   memberItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: THEME.border,
   },
   memberAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3498DB',
+    backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   adminAvatar: {
-    backgroundColor: '#E74C3C', // Different color for admin
+    backgroundColor: THEME.primary,
   },
   memberAvatarText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: fontStyles.semiBold,
+    fontSize: 16,
+    color: THEME.primary,
   },
   adminAvatarText: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   memberInfo: {
     flex: 1,
   },
   memberName: {
+    fontFamily: fontStyles.medium,
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    color: THEME.text.primary,
+    marginBottom: 4,
   },
   memberStatus: {
-    fontSize: 12,
-    color: '#666',
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: THEME.text.tertiary,
   },
   adminStatus: {
-    color: '#E74C3C',
-    fontWeight: 'bold',
+    color: THEME.primary,
+    fontFamily: fontStyles.medium,
   },
   noMembersText: {
+    fontFamily: fontStyles.regular,
     fontSize: 14,
-    color: '#666',
+    color: THEME.text.tertiary,
     fontStyle: 'italic',
-    marginBottom: 8,
+    textAlign: 'center',
+    padding: 16,
   },
-  modalOverlay: {
+  addMemberButton: {
+    backgroundColor: THEME.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  addMemberButtonText: {
+    fontFamily: fontStyles.medium,
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: THEME.border,
   },
   modalTitle: {
+    fontFamily: fontStyles.semiBold,
     fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
+    color: THEME.text.primary,
     marginBottom: 16,
-    textAlign: 'center',
   },
   modalLabel: {
     fontSize: 16,
@@ -1030,124 +1240,111 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalInput: {
-    backgroundColor: '#f5f5f5',
+    fontFamily: fontStyles.regular,
+    backgroundColor: THEME.background,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelButton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    paddingVertical: 12,
+    borderColor: THEME.border,
     paddingHorizontal: 16,
-    flex: 1,
-    marginRight: 8,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inviteButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-  },
-  inviteButtonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: '500',
-  },
-  actionButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  modalHelperText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    color: THEME.text.primary,
     marginBottom: 16,
   },
+  modalHelperText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 12,
+    color: THEME.text.tertiary,
+    marginBottom: 24,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  modalCancelButton: {
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 12,
+  },
+  modalCancelButtonText: {
+    fontFamily: fontStyles.medium,
+    color: THEME.text.secondary,
+    fontSize: 14,
+  },
+  modalSubmitButton: {
+    backgroundColor: THEME.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  modalSubmitButtonText: {
+    fontFamily: fontStyles.medium,
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
   debugContainer: {
-    margin: 16,
+    backgroundColor: THEME.card,
+    borderRadius: 12,
     padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
+    margin: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: THEME.border,
   },
   debugTitle: {
+    fontFamily: fontStyles.semiBold,
     fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
+    color: THEME.text.primary,
+    marginBottom: 12,
   },
   debugText: {
+    fontFamily: fontStyles.medium,
     fontSize: 14,
-    color: '#333',
+    color: THEME.text.secondary,
     marginBottom: 8,
   },
   debugUserText: {
+    fontFamily: fontStyles.regular,
     fontSize: 12,
-    color: '#666',
+    color: THEME.text.tertiary,
     marginBottom: 4,
   },
   debugButton: {
-    backgroundColor: '#333',
-    padding: 8,
-    borderRadius: 4,
+    backgroundColor: THEME.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 12,
   },
   debugButtonText: {
-    color: '#fff',
+    fontFamily: fontStyles.medium,
+    color: '#FFFFFF',
     fontSize: 14,
   },
-  refreshButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  refreshButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  retryButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  buttonContainer: {
+  statusContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: THEME.primary,
+    marginRight: 4,
+  },
+  statusText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: THEME.text.primary,
+  },
+  emptyMembersContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberActionButton: {
+    padding: 8,
   },
 }); 
