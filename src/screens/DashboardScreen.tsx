@@ -261,9 +261,6 @@ export const DashboardScreen = () => {
         onPress={() => navigation.navigate('SubscriptionDetails', { subscriptionId: item.subscription_id })}
       >
         <View style={styles.subscriptionContent}>
-          {/* Left section with category indicator */}
-          <View style={[styles.categoryIndicator, { backgroundColor: getCategoryColor(item.category) }]} />
-          
           {/* Main content */}
           <View style={styles.subscriptionMainContent}>
             {/* Top row with name and cost */}
@@ -307,7 +304,6 @@ export const DashboardScreen = () => {
   const renderCategoryFilter = () => {
     return (
       <View style={styles.categoryFilterSection}>
-        <Text style={styles.sectionTitle}>Categories</Text>
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
@@ -545,7 +541,6 @@ export const DashboardScreen = () => {
         
         {/* Category filter as pills */}
         <View style={styles.categoryFilterSection}>
-          <Text style={styles.sectionTitle}>Categories</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -697,7 +692,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: THEME.primaryLight,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background to match action buttons
     justifyContent: 'center',
     alignItems: 'center',
     ...(Platform.OS === 'ios' 
@@ -792,7 +787,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: THEME.primaryLight,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
@@ -843,7 +838,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: THEME.primaryLight,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background to match action buttons
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -983,10 +978,6 @@ const styles = StyleSheet.create({
   },
   subscriptionContent: {
     flexDirection: 'row',
-  },
-  categoryIndicator: {
-    width: 6,
-    height: '100%',
   },
   subscriptionMainContent: {
     flex: 1,
