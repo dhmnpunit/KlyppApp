@@ -660,14 +660,18 @@ const styles = StyleSheet.create({
     fontFamily: fontStyles.bold,
     fontSize: 18,
     color: '#FFFFFF',
+    textAlign: 'center',
+    ...Platform.OS === 'android' ? { lineHeight: 24 } : {},
   },
   profileInfo: {
     justifyContent: 'center',
+    height: 40,
   },
   username: {
     fontFamily: fontStyles.semiBold,
     fontSize: 16,
     color: THEME.text.primary,
+    ...Platform.OS === 'android' ? { lineHeight: 20 } : {},
   },
   walletAddressContainer: {
     flexDirection: 'row',
@@ -677,6 +681,7 @@ const styles = StyleSheet.create({
     fontFamily: fontStyles.regular,
     fontSize: 12,
     color: THEME.text.tertiary,
+    ...Platform.OS === 'android' ? { lineHeight: 16 } : {},
   },
   settingsButton: {
     padding: 8,
@@ -718,7 +723,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#F6F6F6',
+    borderColor: '#F0F0F0',
   },
   balanceLabel: {
     fontFamily: fontStyles.medium,
@@ -767,7 +772,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     paddingTop: 16,
-    paddingHorizontal: 24,
+    marginHorizontal: -20, // Extend to full width by negating the parent padding
+    paddingHorizontal: 20, // Add padding back to content
   },
   actionButton: {
     alignItems: 'center',
