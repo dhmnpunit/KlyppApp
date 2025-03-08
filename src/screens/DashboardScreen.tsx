@@ -22,6 +22,7 @@ import { useAuthStore } from '../store/authStore';
 import { Subscription } from '../store/subscriptionStore';
 import { fontStyles, textStyles, colors } from '../utils/globalStyles';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 // Define a composite navigation type that can navigate both in tabs and stack
 type DashboardScreenNavigationProp = CompositeNavigationProp<
@@ -54,9 +55,9 @@ const SORT_OPTIONS = [
 
 // Define theme colors at the top of the file
 const THEME = {
-  primary: '#67D306',
-  primaryLight: 'rgba(103, 211, 6, 0.1)',
-  primaryDark: '#58B305',
+  primary: colors.primary,
+  primaryLight: 'rgba(132, 63, 222, 0.15)', // Slightly more opaque for better visibility on Android
+  primaryDark: '#6A32B2', // Darker shade of #843FDE
   text: {
     primary: '#000000',
     secondary: '#444444',
@@ -214,16 +215,18 @@ export const DashboardScreen = () => {
         return '#4A6FFF'; // Blue
       case 'Utilities':
         return '#FF9F45'; // Orange
-      case 'Gaming':
-        return '#50E3C2'; // Teal
-      case 'Health & Fitness':
+      case 'Shopping':
         return THEME.primary; // Our theme color
+      case 'Health & Fitness':
+        return '#50E3C2'; // Teal
       case 'Education':
         return '#FFDE59'; // Yellow
-      case 'Finance':
+      case 'Food & Drink':
         return '#7A5AF8'; // Purple
+      case 'Other':
+        return THEME.primary; // Our theme color
       default:
-        return '#BBBBBB'; // Gray
+        return THEME.primary; // Our theme color
     }
   };
 
@@ -375,7 +378,7 @@ export const DashboardScreen = () => {
   if (loading && subscriptions.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008CFF" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading your subscriptions...</Text>
       </View>
     );
@@ -406,9 +409,18 @@ export const DashboardScreen = () => {
             </View>
           </View>
         </View>
-        <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('Profile')}>
+        <TouchableOpacity 
+          style={styles.settingsButton} 
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.7}
+        >
           <View style={styles.settingsIconContainer}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
+            <Ionicons 
+              name="settings-outline" 
+              size={22} 
+              color={THEME.primary}
+              style={Platform.OS === 'android' ? { marginLeft: 1 } : {}} // Adjust position on Android
+            />
           </View>
         </TouchableOpacity>
       </View>
@@ -444,9 +456,14 @@ export const DashboardScreen = () => {
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={handleAddSubscription}
+              activeOpacity={0.7}
             >
               <View style={styles.actionIconContainer}>
-                <Text style={styles.actionIcon}>+</Text>
+                <Ionicons 
+                  name="add" 
+                  size={22} 
+                  color={THEME.primary} 
+                />
               </View>
               <Text style={styles.actionText}>Add</Text>
             </TouchableOpacity>
@@ -454,9 +471,14 @@ export const DashboardScreen = () => {
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => setShowSortModal(true)}
+              activeOpacity={0.7}
             >
               <View style={styles.actionIconContainer}>
-                <Text style={styles.actionIcon}>↓</Text>
+                <Ionicons 
+                  name="filter" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
               </View>
               <Text style={styles.actionText}>Sort</Text>
             </TouchableOpacity>
@@ -464,21 +486,31 @@ export const DashboardScreen = () => {
             <TouchableOpacity 
               style={styles.actionButton}
               onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.7}
             >
               <View style={styles.actionIconContainer}>
-                <Text style={styles.actionIcon}>🔔</Text>
+                <Ionicons 
+                  name="notifications" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
               </View>
               <Text style={styles.actionText}>Alerts</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => {/* Implement share functionality */}}
+              onPress={() => {/* Implement analytics functionality */}}
+              activeOpacity={0.7}
             >
               <View style={styles.actionIconContainer}>
-                <Text style={styles.actionIcon}>↗️</Text>
+                <Ionicons 
+                  name="stats-chart" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
               </View>
-              <Text style={styles.actionText}>Share</Text>
+              <Text style={styles.actionText}>Analytics</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -487,7 +519,12 @@ export const DashboardScreen = () => {
         {filteredSubscriptions.length === 0 && (
           <View style={styles.welcomeCard}>
             <View style={styles.welcomeIconContainer}>
-              <Text style={styles.welcomeIcon}>👋</Text>
+              <Ionicons 
+                name="hand-left" 
+                size={22} 
+                color={THEME.primary}
+                style={Platform.OS === 'android' ? { marginLeft: 2 } : {}} // Adjust position on Android
+              />
             </View>
             <View style={styles.welcomeContent}>
               <Text style={styles.welcomeTitle}>Welcome to Klypp</Text>
@@ -632,9 +669,29 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  settingsIcon: {
-    fontSize: 18,
+    // Use platform-specific styling
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        // Remove elevation which causes the shadow
+        elevation: 0,
+        // Use a subtle border instead
+        borderWidth: 0.5,
+        borderColor: 'rgba(0,0,0,0.05)',
+        overflow: 'hidden',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      }
+    })
   },
   scrollContainer: {
     flex: 1,
@@ -676,7 +733,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   positivePercentage: {
-    backgroundColor: 'rgba(103, 211, 6, 0.1)', // Light green based on our theme
+    backgroundColor: 'rgba(132, 63, 222, 0.1)', // Use our theme color with opacity
   },
   negativePercentage: {
     backgroundColor: 'rgba(231, 76, 60, 0.1)', // Light red
@@ -686,7 +743,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   positivePercentageText: {
-    color: THEME.primary,
+    color: THEME.primary, // Use our theme color
   },
   negativePercentageText: {
     color: '#E74C3C', // Red
@@ -694,29 +751,54 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     paddingTop: 16,
+    paddingHorizontal: 24,
   },
   actionButton: {
     alignItems: 'center',
+    width: 60,
+    justifyContent: 'center',
+    height: 80,
   },
   actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionIcon: {
-    fontSize: 20,
+    marginBottom: 6,
+    // Use platform-specific styling
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 0,
+        borderWidth: 0.5,
+        borderColor: 'rgba(0,0,0,0.05)',
+        overflow: 'hidden',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      }
+    })
   },
   actionText: {
     fontFamily: fontStyles.medium,
     fontSize: 12,
     color: THEME.text.tertiary,
+    textAlign: 'center',
+    marginTop: 2,
   },
   welcomeCard: {
     backgroundColor: THEME.card,
@@ -733,16 +815,36 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   welcomeIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  welcomeIcon: {
-    fontSize: 20,
+    // Use platform-specific styling
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        // Remove elevation which causes the shadow
+        elevation: 0,
+        // Use a subtle border instead
+        borderWidth: 0.5,
+        borderColor: 'rgba(0,0,0,0.05)',
+        overflow: 'hidden',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      }
+    })
   },
   welcomeContent: {
     flex: 1,
@@ -782,8 +884,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
     marginRight: 8,
+    backgroundColor: '#F0F0F0',
   },
   categoryPillSelected: {
     backgroundColor: THEME.primary,
@@ -791,7 +893,7 @@ const styles = StyleSheet.create({
   categoryPillText: {
     fontFamily: fontStyles.medium,
     fontSize: 14,
-    color: THEME.text.tertiary,
+    color: '#666666',
   },
   categoryPillTextSelected: {
     color: '#FFFFFF',
@@ -810,7 +912,7 @@ const styles = StyleSheet.create({
   sharedCount: {
     fontFamily: fontStyles.regular,
     fontSize: 16,
-    color: '#FF56F6',
+    color: colors.primary,
   },
   emptySubscriptions: {
     backgroundColor: THEME.card,
@@ -960,7 +1062,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   sortOptionTextSelected: {
-    color: '#008CFF',
+    color: colors.primary,
     fontWeight: '500',
   },
   cancelButton: {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAlert } from '../context/AlertContext';
+import { fontStyles, textStyles, colors } from '../utils/globalStyles';
 
 export const CustomAlert = () => {
   const { currentAlert, hideAlert } = useAlert();
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   customAlertBox: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 24,
     width: '85%',
@@ -116,15 +117,12 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   customAlertTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#333',
+    ...textStyles.h3,
     marginBottom: 16,
     textAlign: 'center',
   },
   customAlertMessage: {
-    fontSize: 16,
-    color: '#333',
+    ...textStyles.body,
     marginBottom: 24,
     textAlign: 'center',
     lineHeight: 22,
@@ -142,24 +140,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     elevation: 2,
-    backgroundColor: '#008CFF',
+    backgroundColor: colors.primary,
   },
   customAlertCancelButton: {
     backgroundColor: '#f0f0f0',
     marginRight: 8,
   },
   customAlertConfirmButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.success,
     marginLeft: 8,
   },
   customAlertCancelButtonText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: '500',
+    ...textStyles.button,
+    color: colors.text.tertiary,
   },
   customAlertButtonText: {
+    ...textStyles.button,
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 }); 
