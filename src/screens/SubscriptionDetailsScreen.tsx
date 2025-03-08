@@ -450,8 +450,14 @@ export const SubscriptionDetailsScreen = () => {
       <View style={styles.membersContainer}>
         {members.map((member) => (
           <View key={member.user_id} style={styles.memberItem}>
-            <View style={styles.memberAvatar}>
-              <Text style={styles.memberAvatarText}>
+            <View style={[
+              styles.memberAvatar,
+              member.isAdmin && styles.adminAvatar
+            ]}>
+              <Text style={[
+                styles.memberAvatarText,
+                member.isAdmin && styles.adminAvatarText
+              ]}>
                 {member.users?.username?.charAt(0).toUpperCase() || 'U'}
               </Text>
             </View>
@@ -459,8 +465,11 @@ export const SubscriptionDetailsScreen = () => {
               <Text style={styles.memberName}>
                 {member.users?.name || member.users?.username || 'Unknown User'}
               </Text>
-              <Text style={styles.memberStatus}>
-                {member.status === 'accepted' ? 'Member' : 'Pending'}
+              <Text style={[
+                styles.memberStatus,
+                member.isAdmin && styles.adminStatus
+              ]}>
+                {member.isAdmin ? 'Admin' : member.status === 'accepted' ? 'Member' : 'Pending'}
               </Text>
             </View>
           </View>
@@ -481,21 +490,15 @@ export const SubscriptionDetailsScreen = () => {
       'Confirm Deletion',
       async () => {
         try {
+          setLoading(true);
           console.log('Starting deletion process for subscription:', subscriptionId);
           
           const result = await deleteSubscription(subscriptionId);
           
           if (result.success) {
-            console.log('Deletion successful');
-            // Don't show success message here, we'll do it after the alert is closed
-            return new Promise<void>((resolve) => {
-              setTimeout(() => {
-                // Show success message after the confirmation dialog is closed
-                showAlert('Subscription deleted successfully', 'Success', () => {
-                  navigation.goBack();
-                });
-                resolve();
-              }, 300); // Small delay to ensure the first alert is fully closed
+            console.log('Deletion successful, showing success message');
+            showAlert('Subscription deleted successfully', 'Success', () => {
+              navigation.goBack();
             });
           } else {
             console.error('Deletion failed with result:', result);
@@ -516,13 +519,7 @@ export const SubscriptionDetailsScreen = () => {
             }
             
             console.error('Showing error message:', errorMessage);
-            // Return a promise that resolves after showing the error message
-            return new Promise<void>((resolve) => {
-              setTimeout(() => {
-                showAlert(errorMessage, 'Error');
-                resolve();
-              }, 300);
-            });
+            showAlert(errorMessage, 'Error');
           }
         } catch (error) {
           console.error('Exception in delete process:', error);
@@ -532,17 +529,55 @@ export const SubscriptionDetailsScreen = () => {
             ? error.message 
             : 'An unexpected error occurred';
             
-          // Return a promise that resolves after showing the error message
-          return new Promise<void>((resolve) => {
-            setTimeout(() => {
-              showAlert(errorMessage, 'Error');
-              resolve();
-            }, 300);
-          });
+          showAlert(errorMessage, 'Error');
+        } finally {
+          setLoading(false);
         }
       }
     );
   }, [subscription, subscriptionId, showAlert, deleteSubscription, navigation]);
+
+  // Add a refresh function to allow users to manually refresh the members list
+  const handleRefresh = useCallback(() => {
+    console.log('Refreshing subscription details and members...');
+    
+    // Reload subscription details
+    const loadSubscription = async () => {
+      setLoading(true);
+      try {
+        // Fetch directly from database to ensure we have the latest data
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('subscription_id', subscriptionId)
+          .single();
+          
+        if (error) {
+          console.error('Error fetching subscription:', error);
+          setError('Failed to load subscription details');
+        } else if (data) {
+          console.log('Subscription refreshed from database:', data);
+          setSubscription(data);
+          
+          // Check if current user is the admin
+          if (currentUserId && data.admin_id) {
+            const adminCheck = currentUserId === data.admin_id;
+            setIsAdmin(adminCheck);
+            console.log('Is current user admin?', adminCheck);
+          }
+        }
+      } catch (err) {
+        console.error('Error in refreshing subscription:', err);
+        setError('An unexpected error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Reload subscription details and members
+    loadSubscription();
+    fetchMembers();
+  }, [subscriptionId, currentUserId, fetchMembers]);
 
   if (loading || subscriptionLoading) {
     return (
@@ -557,12 +592,20 @@ export const SubscriptionDetailsScreen = () => {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Error: {error || subscriptionError}</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRefresh}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -586,17 +629,29 @@ export const SubscriptionDetailsScreen = () => {
   const isCurrentUserAdmin = isAdmin;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{subscription.name}</Text>
+        
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={handleRefresh}
+        >
+          <Text style={styles.refreshButtonText}>Refresh</Text>
+        </TouchableOpacity>
       </View>
-
+      
+      <Text style={styles.title}>{subscription.name}</Text>
+      
       <View style={styles.card}>
         <View style={styles.costContainer}>
           <Text style={styles.costLabel}>Cost</Text>
@@ -903,18 +958,24 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
   },
   memberAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#008CFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3498DB',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
+  adminAvatar: {
+    backgroundColor: '#E74C3C', // Different color for admin
+  },
   memberAvatarText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  adminAvatarText: {
+    color: '#fff',
   },
   memberInfo: {
     flex: 1,
@@ -925,8 +986,12 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   memberStatus: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+  },
+  adminStatus: {
+    color: '#E74C3C',
+    fontWeight: 'bold',
   },
   noMembersText: {
     fontSize: 14,
@@ -1056,5 +1121,33 @@ const styles = StyleSheet.create({
   debugButtonText: {
     color: '#fff',
     fontSize: 14,
+  },
+  refreshButton: {
+    backgroundColor: '#008CFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  retryButton: {
+    backgroundColor: '#008CFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
 }); 

@@ -177,7 +177,7 @@ export const ProfileScreen = () => {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.containerWrapper}>
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
         <View style={styles.headerButtons}>
@@ -191,136 +191,142 @@ export const ProfileScreen = () => {
           </TouchableOpacity>
         </View>
       </View>
-
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      <View style={styles.card}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {username ? username.charAt(0).toUpperCase() : 'U'}
-            </Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{name || 'No name set'}</Text>
-            <Text style={styles.profileEmail}>{user?.email}</Text>
-          </View>
-        </View>
-
-        {isEditing ? (
-          <View style={styles.formContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor="#999"
-            />
-
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Username"
-              placeholderTextColor="#999"
-            />
-
-            <Text style={styles.label}>Currency</Text>
-            <View style={styles.currencyContainer}>
-              {['USD', 'EUR', 'GBP', 'CAD', 'AUD'].map((curr) => (
-                <TouchableOpacity
-                  key={curr}
-                  style={[
-                    styles.currencyButton,
-                    currency === curr && styles.currencyButtonSelected,
-                  ]}
-                  onPress={() => setCurrency(curr)}
-                >
-                  <Text
-                    style={[
-                      styles.currencyButtonText,
-                      currency === curr && styles.currencyButtonTextSelected,
-                    ]}
-                  >
-                    {curr}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.themeContainer}>
-              <Text style={styles.label}>Dark Theme</Text>
-              <Switch
-                value={theme === 'dark'}
-                onValueChange={(value) => setTheme(value ? 'dark' : 'light')}
-                trackColor={{ false: '#ccc', true: '#008CFF' }}
-                thumbColor="#fff"
-              />
-            </View>
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSaveProfile}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setIsEditing(false)}
-                disabled={loading}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Username</Text>
-              <Text style={styles.detailValue}>{username || 'Not set'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Currency</Text>
-              <Text style={styles.detailValue}>{currency}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Theme</Text>
-              <Text style={styles.detailValue}>
-                {theme.charAt(0).toUpperCase() + theme.slice(1)}
-              </Text>
-            </View>
+      
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </View>
 
-      <TouchableOpacity
-        style={styles.signOutButton}
-        onPress={handleSignOut}
-        disabled={loading}
-      >
-        <Text style={styles.signOutButtonText}>Sign Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <View style={styles.card}>
+          <View style={styles.profileHeader}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {username ? username.charAt(0).toUpperCase() : 'U'}
+              </Text>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{name || 'No name set'}</Text>
+              <Text style={styles.profileEmail}>{user?.email}</Text>
+            </View>
+          </View>
+
+          {isEditing ? (
+            <View style={styles.formContainer}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Your name"
+                placeholderTextColor="#999"
+              />
+
+              <Text style={styles.label}>Username</Text>
+              <TextInput
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                placeholder="Username"
+                placeholderTextColor="#999"
+              />
+
+              <Text style={styles.label}>Currency</Text>
+              <View style={styles.currencyContainer}>
+                {['USD', 'EUR', 'GBP', 'CAD', 'AUD'].map((curr) => (
+                  <TouchableOpacity
+                    key={curr}
+                    style={[
+                      styles.currencyButton,
+                      currency === curr && styles.currencyButtonSelected,
+                    ]}
+                    onPress={() => setCurrency(curr)}
+                  >
+                    <Text
+                      style={[
+                        styles.currencyButtonText,
+                        currency === curr && styles.currencyButtonTextSelected,
+                      ]}
+                    >
+                      {curr}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.themeContainer}>
+                <Text style={styles.label}>Dark Theme</Text>
+                <Switch
+                  value={theme === 'dark'}
+                  onValueChange={(value) => setTheme(value ? 'dark' : 'light')}
+                  trackColor={{ false: '#ccc', true: '#008CFF' }}
+                  thumbColor="#fff"
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSaveProfile}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setIsEditing(false)}
+                  disabled={loading}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.detailsContainer}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Username</Text>
+                <Text style={styles.detailValue}>{username || 'Not set'}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Currency</Text>
+                <Text style={styles.detailValue}>{currency}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Theme</Text>
+                <Text style={styles.detailValue}>
+                  {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <TouchableOpacity
+          style={styles.signOutButton}
+          onPress={handleSignOut}
+          disabled={loading}
+        >
+          <Text style={styles.signOutButtonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  containerWrapper: {
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
@@ -328,11 +334,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 44, // For status bar
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e9ecef',
   },
   title: {
     fontSize: 24,
@@ -528,5 +535,12 @@ const styles = StyleSheet.create({
     color: '#008CFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    padding: 16,
+    paddingBottom: 20,
   },
 }); 

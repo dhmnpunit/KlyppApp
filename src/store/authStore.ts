@@ -208,7 +208,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         options: {
           data: {
             username: username // Store username in user metadata
-          }
+          },
+          emailRedirectTo: undefined // Disable email redirect
         }
       });
 

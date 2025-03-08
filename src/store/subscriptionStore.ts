@@ -40,6 +40,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   fetchSubscriptions: async () => {
     set({ loading: true, error: null });
     try {
+      console.log('Fetching subscriptions...');
+      
       // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -93,6 +95,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
       // If no memberships, just use owned subscriptions
       if (!membershipData || membershipData.length === 0) {
+        console.log('No shared subscriptions found, using only owned subscriptions');
         set({ 
           subscriptions: ownedSubscriptions || [],
           loading: false 
@@ -100,6 +103,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         return;
       }
 
+      console.log(`Found ${membershipData.length} shared subscriptions`);
+      
       // Fetch the actual subscription details for each membership
       const memberSubscriptionsPromises = membershipData.map(async (membership) => {
         const { data: subscriptionData, error: subscriptionError } = await supabase
@@ -109,35 +114,35 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
           .single();
         
         if (subscriptionError) {
-          console.warn(`Error fetching subscription ${membership.subscription_id}:`, subscriptionError);
+          console.error(`Error fetching shared subscription ${membership.subscription_id}:`, subscriptionError);
           return null;
         }
         
         return subscriptionData;
       });
 
+      // Wait for all promises to resolve
       const memberSubscriptionsResults = await Promise.all(memberSubscriptionsPromises);
-      const memberSubscriptions = memberSubscriptionsResults.filter(Boolean) as Subscription[];
-
-      // Combine owned and shared subscriptions
-      const allSubscriptions = [
-        ...(ownedSubscriptions || []),
-        ...memberSubscriptions
-      ];
-
-      // Remove duplicates (in case user is both admin and member)
-      const uniqueSubscriptions = Array.from(
-        new Map(allSubscriptions.map(sub => [sub.subscription_id, sub])).values()
-      );
-
+      
+      // Filter out null results (failed fetches)
+      const memberSubscriptions = memberSubscriptionsResults.filter(sub => sub !== null) as Subscription[];
+      
+      console.log(`Successfully fetched ${memberSubscriptions.length} shared subscriptions`);
+      
+      // Combine owned and member subscriptions
+      const allSubscriptions = [...(ownedSubscriptions || []), ...memberSubscriptions];
+      
+      console.log(`Total subscriptions: ${allSubscriptions.length}`);
+      
+      // Set the subscriptions in the store
       set({ 
-        subscriptions: uniqueSubscriptions,
+        subscriptions: allSubscriptions,
         loading: false 
       });
     } catch (error) {
-      console.error('Error fetching subscriptions:', error);
+      console.error('Error in fetchSubscriptions:', error);
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch subscriptions', 
+        error: error instanceof Error ? error.message : 'An unknown error occurred',
         loading: false 
       });
     }
@@ -362,7 +367,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         .from('subscriptions')
         .delete()
         .eq('subscription_id', subscriptionId);
-        
+
       if (deleteError) {
         console.error('Error deleting subscription:', deleteError);
         setTimeout(() => {
@@ -374,20 +379,20 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       // Step 5: Update local state
       console.log('Successfully deleted subscription');
       setTimeout(() => {
-        set(state => ({
-          subscriptions: state.subscriptions.filter(sub => sub.subscription_id !== subscriptionId),
-          loading: false
-        }));
+      set(state => ({
+        subscriptions: state.subscriptions.filter(sub => sub.subscription_id !== subscriptionId),
+        loading: false
+      }));
       }, 0);
       
       return { success: true };
     } catch (error) {
       console.error('Unexpected error in deleteSubscription:', error);
       setTimeout(() => {
-        set({ 
+      set({ 
           error: error instanceof Error ? error.message : 'An unexpected error occurred', 
-          loading: false 
-        });
+        loading: false 
+      });
       }, 0);
       return { success: false, error };
     }
@@ -397,4 +402,4 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   getSubscriptionById: (subscriptionId) => {
     return get().subscriptions.find(sub => sub.subscription_id === subscriptionId);
   }
-}));
+})); 

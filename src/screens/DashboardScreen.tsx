@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,7 @@ import {
   ScrollView,
   Dimensions
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainStackParamList } from '../navigation/AppNavigator';
 import { useSubscriptionStore } from '../store/subscriptionStore';
@@ -48,6 +48,8 @@ export const DashboardScreen = () => {
   const { subscriptions, fetchSubscriptions, loading, error } = useSubscriptionStore();
   const { signOut } = useAuthStore();
   const [totalCost, setTotalCost] = useState(0);
+  const [previousMonthCost, setPreviousMonthCost] = useState(0);
+  const [costDifference, setCostDifference] = useState(0);
   
   // Filtering and sorting state
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -113,8 +115,43 @@ export const DashboardScreen = () => {
     return data.sort((a, b) => b.cost - a.cost);
   };
 
+  // Calculate the cost difference from the previous month
+  const calculateCostDifference = (subs: Subscription[]) => {
+    // For demo purposes, let's simulate a previous month cost
+    // In a real app, you would fetch this from your backend or calculate it based on historical data
+    
+    // Only recalculate if we haven't done so already or if the total cost has changed
+    if (previousMonthCost === 0 || Math.abs(totalCost - previousMonthCost - costDifference) > 0.01) {
+      // Generate a random previous month cost that's somewhat realistic
+      // This ensures the difference is reasonable (between -20% and +20% of current cost)
+      const variationPercentage = (Math.random() * 0.4) - 0.2; // Random value between -0.2 and 0.2
+      const simulatedPreviousMonthCost = totalCost / (1 + variationPercentage);
+      setPreviousMonthCost(simulatedPreviousMonthCost);
+      
+      // Calculate the difference (current - previous)
+      const difference = totalCost - simulatedPreviousMonthCost;
+      setCostDifference(difference);
+      
+      return difference;
+    }
+    
+    return costDifference;
+  };
+
+  // Use useFocusEffect to refresh subscriptions when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Dashboard screen focused, refreshing subscriptions...');
+      fetchSubscriptions();
+      return () => {
+        // Cleanup function (optional)
+      };
+    }, [fetchSubscriptions])
+  );
+
+  // Keep the existing useEffect for initial load (optional)
   useEffect(() => {
-    // Fetch subscriptions when the component mounts
+    // Initial fetch when component mounts
     fetchSubscriptions();
   }, []);
 
@@ -170,10 +207,15 @@ export const DashboardScreen = () => {
       // Calculate category spending data for the pie chart
       const categorySpendingData = calculateCategorySpending(subscriptions);
       setCategoryData(categorySpendingData);
+      
+      // Calculate cost difference from previous month
+      calculateCostDifference(subscriptions);
     } else {
       setFilteredSubscriptions([]);
       setTotalCost(0);
       setCategoryData([]);
+      setPreviousMonthCost(0);
+      setCostDifference(0);
     }
   }, [subscriptions, selectedCategory, sortOption]);
 
@@ -187,6 +229,7 @@ export const DashboardScreen = () => {
 
   const renderSubscriptionItem = ({ item }: { item: Subscription }) => (
     <TouchableOpacity 
+      key={item.subscription_id}
       style={styles.subscriptionCard}
       onPress={() => handleSubscriptionPress(item.subscription_id)}
     >
@@ -314,86 +357,99 @@ export const DashboardScreen = () => {
         </View>
       </View>
       
-      <View style={styles.summaryRow}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Monthly Spending</Text>
-          <Text style={styles.summaryAmount}>${totalCost.toFixed(2)}</Text>
-          <Text style={styles.summarySubtitle}>
-            {selectedCategory !== 'All' ? `in ${selectedCategory}` : ''}
-          </Text>
-        </View>
-        
-        <View style={styles.activeSubscriptionsCard}>
-          <Text style={styles.activeSubscriptionsTitle}>Active Subscriptions</Text>
-          <Text style={styles.activeSubscriptionsCount}>{filteredSubscriptions.length}</Text>
-          <View style={styles.sharedSubscriptionsContainer}>
-            <View style={styles.sharedBadge}>
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Monthly Cost</Text>
+            <View style={styles.amountRow}>
+              <Text style={styles.summaryAmount}>${totalCost.toFixed(2)}</Text>
+            </View>
+            {costDifference !== 0 && (
+              <Text style={styles.costTrend}>
+                {costDifference > 0 ? (
+                  <Text style={styles.costIncrease}>+${Math.abs(costDifference).toFixed(2)} from last month</Text>
+                ) : (
+                  <Text style={styles.costDecrease}>-${Math.abs(costDifference).toFixed(2)} from last month</Text>
+                )}
+              </Text>
+            )}
+          </View>
+          
+          <View style={styles.activeSubscriptionsCard}>
+            <Text style={styles.activeSubscriptionsTitle}>Active Subscriptions</Text>
+            <View style={styles.amountRow}>
+              <Text style={styles.activeSubscriptionsCount}>{filteredSubscriptions.length}</Text>
+            </View>
+            <View style={styles.sharedBadgeContainer}>
               <Text style={styles.sharedBadgeText}>
-                {filteredSubscriptions.filter(sub => sub.is_shared).length} Shared
+                {filteredSubscriptions.filter(sub => sub.is_shared).length} shared
               </Text>
             </View>
           </View>
         </View>
-      </View>
-      
-      {/* Spending by Category Chart */}
-      {categoryData.length > 0 && (
-        <DonutChart data={categoryData} />
-      )}
-      
-      {renderCategoryFilter()}
-      
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          {error.includes('Database tables not set up') && (
-            <View style={styles.setupGuideContainer}>
-              <Text style={styles.setupGuideTitle}>Database Setup Guide:</Text>
-              <Text style={styles.setupGuideText}>
-                1. Go to your Supabase project dashboard
-              </Text>
-              <Text style={styles.setupGuideText}>
-                2. Navigate to the SQL Editor
-              </Text>
-              <Text style={styles.setupGuideText}>
-                3. Run the following SQL to create required tables:
-              </Text>
-              <View style={styles.codeBlock}>
-                <Text style={styles.codeText}>
-                  {`-- Create users table\nCREATE TABLE public.users (\n  user_id UUID REFERENCES auth.users(id) PRIMARY KEY,\n  username TEXT UNIQUE,\n  name TEXT,\n  currency TEXT DEFAULT 'USD',\n  theme TEXT DEFAULT 'light',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscriptions table\nCREATE TABLE public.subscriptions (\n  subscription_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  admin_id UUID REFERENCES auth.users(id),\n  name TEXT NOT NULL,\n  cost DECIMAL NOT NULL,\n  renewal_frequency TEXT NOT NULL,\n  start_date DATE NOT NULL,\n  next_renewal_date DATE NOT NULL,\n  category TEXT,\n  auto_renews BOOLEAN DEFAULT TRUE,\n  is_shared BOOLEAN DEFAULT FALSE,\n  max_members INTEGER,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscription_members table\nCREATE TABLE public.subscription_members (\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  user_id UUID REFERENCES auth.users(id),\n  status TEXT DEFAULT 'pending',\n  joined_at TIMESTAMP WITH TIME ZONE,\n  PRIMARY KEY (subscription_id, user_id)\n);\n\n-- Create notifications table\nCREATE TABLE public.notifications (\n  notification_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  user_id UUID REFERENCES auth.users(id),\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  message TEXT NOT NULL,\n  type TEXT NOT NULL,\n  status TEXT DEFAULT 'unread',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);`}
+        
+        {/* Spending by Category Chart */}
+        {categoryData.length > 0 && (
+          <DonutChart data={categoryData} />
+        )}
+        
+        {renderCategoryFilter()}
+        
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            {error.includes('Database tables not set up') && (
+              <View style={styles.setupGuideContainer}>
+                <Text style={styles.setupGuideTitle}>Database Setup Guide:</Text>
+                <Text style={styles.setupGuideText}>
+                  1. Go to your Supabase project dashboard
+                </Text>
+                <Text style={styles.setupGuideText}>
+                  2. Navigate to the SQL Editor
+                </Text>
+                <Text style={styles.setupGuideText}>
+                  3. Run the following SQL to create required tables:
+                </Text>
+                <View style={styles.codeBlock}>
+                  <Text style={styles.codeText}>
+                    {`-- Create users table\nCREATE TABLE public.users (\n  user_id UUID REFERENCES auth.users(id) PRIMARY KEY,\n  username TEXT UNIQUE,\n  name TEXT,\n  currency TEXT DEFAULT 'USD',\n  theme TEXT DEFAULT 'light',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscriptions table\nCREATE TABLE public.subscriptions (\n  subscription_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  admin_id UUID REFERENCES auth.users(id),\n  name TEXT NOT NULL,\n  cost DECIMAL NOT NULL,\n  renewal_frequency TEXT NOT NULL,\n  start_date DATE NOT NULL,\n  next_renewal_date DATE NOT NULL,\n  category TEXT,\n  auto_renews BOOLEAN DEFAULT TRUE,\n  is_shared BOOLEAN DEFAULT FALSE,\n  max_members INTEGER,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscription_members table\nCREATE TABLE public.subscription_members (\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  user_id UUID REFERENCES auth.users(id),\n  status TEXT DEFAULT 'pending',\n  joined_at TIMESTAMP WITH TIME ZONE,\n  PRIMARY KEY (subscription_id, user_id)\n);\n\n-- Create notifications table\nCREATE TABLE public.notifications (\n  notification_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  user_id UUID REFERENCES auth.users(id),\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  message TEXT NOT NULL,\n  type TEXT NOT NULL,\n  status TEXT DEFAULT 'unread',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);`}
+                  </Text>
+                </View>
+                <Text style={styles.setupGuideText}>
+                  4. Set up Row Level Security (RLS) policies for each table
+                </Text>
+                <Text style={styles.setupGuideText}>
+                  5. Restart the app after setup is complete
                 </Text>
               </View>
-              <Text style={styles.setupGuideText}>
-                4. Set up Row Level Security (RLS) policies for each table
+            )}
+          </View>
+        )}
+        
+        {/* Replace FlatList with a regular View containing subscription items */}
+        <View style={styles.subscriptionsList}>
+          {filteredSubscriptions.length > 0 ? (
+            filteredSubscriptions.map(item => renderSubscriptionItem({ item }))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {selectedCategory !== 'All' 
+                  ? `You don't have any subscriptions in the ${selectedCategory} category.` 
+                  : "You don't have any subscriptions yet."}
               </Text>
-              <Text style={styles.setupGuideText}>
-                5. Restart the app after setup is complete
+              <Text style={styles.emptySubtext}>
+                {selectedCategory !== 'All' 
+                  ? 'Try selecting a different category or add a new subscription.' 
+                  : 'Add your first subscription to get started!'}
               </Text>
             </View>
           )}
         </View>
-      )}
-      
-      <FlatList
-        data={filteredSubscriptions}
-        renderItem={renderSubscriptionItem}
-        keyExtractor={item => item.subscription_id}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {selectedCategory !== 'All' 
-                ? `You don't have any subscriptions in the ${selectedCategory} category.` 
-                : "You don't have any subscriptions yet."}
-            </Text>
-            <Text style={styles.emptySubtext}>
-              {selectedCategory !== 'All' 
-                ? 'Try selecting a different category or add a new subscription.' 
-                : 'Add your first subscription to get started!'}
-            </Text>
-          </View>
-        }
-      />
+      </ScrollView>
       
       {renderSortModal()}
       
@@ -411,14 +467,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-    padding: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     paddingTop: 44, // For status bar
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   title: {
     fontSize: 24,
@@ -450,68 +509,80 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryCard: {
-    backgroundColor: '#008CFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
     flex: 1,
     marginRight: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   summaryTitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    marginBottom: 8,
+    color: '#666',
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 6,
   },
-  summaryAmount: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
+  amountRow: {
     marginBottom: 4,
   },
-  summarySubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+  summaryAmount: {
+    color: '#000',
+    fontSize: 26,
+    fontWeight: 'bold',
+  },
+  costTrend: {
+    fontSize: 13,
+  },
+  costIncrease: {
+    color: '#E74C3C',
+    fontWeight: '500',
+  },
+  costDecrease: {
+    color: '#2ECC71',
+    fontWeight: '500',
   },
   activeSubscriptionsCard: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
     flex: 1,
     marginLeft: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   activeSubscriptionsTitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    marginBottom: 8,
+    color: '#666',
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 6,
   },
   activeSubscriptionsCount: {
-    color: '#fff',
-    fontSize: 32,
+    color: '#000',
+    fontSize: 26,
     fontWeight: 'bold',
-    marginBottom: 4,
   },
-  sharedSubscriptionsContainer: {
-    marginTop: 8,
-  },
-  sharedBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  sharedBadgeContainer: {
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
     alignSelf: 'flex-start',
+    marginTop: 4,
   },
   sharedBadgeText: {
-    color: '#fff',
-    fontSize: 14,
+    color: '#666',
+    fontSize: 13,
     fontWeight: '500',
   },
   categoryFilterWrapper: {
@@ -541,8 +612,15 @@ const styles = StyleSheet.create({
   categoryFilterTextSelected: {
     color: '#fff',
   },
-  listContainer: {
-    paddingBottom: 80, // Space for the add button
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    padding: 16,
+    paddingBottom: 100, // Extra space at the bottom for the add button
+  },
+  subscriptionsList: {
+    marginTop: 8,
   },
   subscriptionCard: {
     backgroundColor: '#fff',

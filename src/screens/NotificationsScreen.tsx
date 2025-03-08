@@ -7,7 +7,8 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
-  RefreshControl
+  RefreshControl,
+  ScrollView
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -234,7 +235,20 @@ export const NotificationsScreen = () => {
         
         Alert.alert(
           'Invitation Accepted',
-          `You have joined the ${notification.subscription?.name} subscription.`
+          `You have joined the ${notification.subscription?.name} subscription.`,
+          [
+            {
+              text: 'View Subscriptions',
+              onPress: () => {
+                // Navigate to the Dashboard tab
+                navigation.navigate('Dashboard');
+              },
+            },
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+          ]
         );
       } else {
         Alert.alert('Error', result.error || 'Failed to accept invitation');
@@ -364,11 +378,9 @@ export const NotificationsScreen = () => {
         </View>
       )}
       
-      <FlatList
-        data={notifications}
-        renderItem={renderNotificationItem}
-        keyExtractor={item => item.notification_id}
-        contentContainerStyle={styles.listContainer}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -376,7 +388,14 @@ export const NotificationsScreen = () => {
             colors={['#008CFF']}
           />
         }
-        ListEmptyComponent={
+      >
+        {notifications.length > 0 ? (
+          notifications.map(item => (
+            <View key={item.notification_id}>
+              {renderNotificationItem({ item })}
+            </View>
+          ))
+        ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
               {error ? 'Unable to load notifications' : 'No notifications yet'}
@@ -395,8 +414,8 @@ export const NotificationsScreen = () => {
               </TouchableOpacity>
             )}
           </View>
-        }
-      />
+        )}
+      </ScrollView>
     </View>
   );
 };
@@ -410,20 +429,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 44, // For status bar
+    backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e9ecef',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
   },
-  listContainer: {
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContentContainer: {
     padding: 16,
-    paddingBottom: 80, // Space for bottom tabs
+    paddingBottom: 20,
   },
   notificationItem: {
     backgroundColor: '#fff',

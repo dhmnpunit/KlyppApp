@@ -21,20 +21,41 @@ export const DonutChart = ({ data }: DonutChartProps) => {
     return null;
   }
 
+  // Limit to top 4 categories + "Other" if there are more
+  let chartData = [...data];
+  if (chartData.length > 4) {
+    const topCategories = chartData.slice(0, 3);
+    const otherCategories = chartData.slice(3);
+    
+    const otherTotal = otherCategories.reduce((sum, item) => sum + item.cost, 0);
+    const otherCategory = {
+      name: 'Other',
+      cost: otherTotal,
+      color: '#95A5A6', // Gray color for "Other"
+      legendFontColor: '#333',
+      legendFontSize: 12
+    };
+    
+    chartData = [...topCategories, otherCategory];
+  }
+
   // Calculate total for percentages
-  const total = data.reduce((sum, item) => sum + item.cost, 0);
+  const total = chartData.reduce((sum, item) => sum + item.cost, 0);
   
   // Chart dimensions
   const width = screenWidth - 40;
-  const height = 220;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(centerX, centerY) - 10;
+  const height = 140; // Reduced height
+  
+  // Calculate chart dimensions
+  const chartSize = Math.min(width * 0.4, height); // Use the smaller dimension
+  const centerX = chartSize / 2;
+  const centerY = chartSize / 2;
+  const radius = Math.min(centerX, centerY) - 10; // Smaller radius
   const innerRadius = radius * 0.6; // Size of the hole
   
   // Calculate segments
   let startAngle = 0;
-  const segments = data.map((item, index) => {
+  const segments = chartData.map((item, index) => {
     const percentage = item.cost / total;
     const endAngle = startAngle + percentage * 2 * Math.PI;
     
@@ -64,7 +85,8 @@ export const DonutChart = ({ data }: DonutChartProps) => {
       path,
       color: item.color,
       startAngle,
-      endAngle
+      endAngle,
+      percentage
     };
     
     startAngle = endAngle;
@@ -75,37 +97,47 @@ export const DonutChart = ({ data }: DonutChartProps) => {
     <View style={styles.container}>
       <Text style={styles.title}>Spending by Category</Text>
       
-      <View style={styles.chartContainer}>
-        <Svg width={width} height={height}>
-          <G>
-            {segments.map((segment, index) => (
-              <Path
-                key={index}
-                d={segment.path}
-                fill={segment.color}
-                stroke="white"
-                strokeWidth={1}
+      <View style={styles.chartAndLegendContainer}>
+        <View style={styles.chartContainer}>
+          <Svg width={chartSize} height={chartSize}>
+            <G>
+              {segments.map((segment, index) => (
+                <Path
+                  key={index}
+                  d={segment.path}
+                  fill={segment.color}
+                  stroke="white"
+                  strokeWidth={1}
+                />
+              ))}
+              {/* Inner circle (hole) */}
+              <Circle
+                cx={centerX}
+                cy={centerY}
+                r={innerRadius}
+                fill="white"
               />
-            ))}
-            {/* Inner circle (hole) */}
-            <Circle
-              cx={centerX}
-              cy={centerY}
-              r={innerRadius}
-              fill="white"
-            />
-          </G>
-        </Svg>
-      </View>
-      
-      {/* Custom Legend */}
-      <View style={styles.legendContainer}>
-        {data.map((item, index) => (
-          <View key={index} style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>{item.name}</Text>
-          </View>
-        ))}
+            </G>
+          </Svg>
+        </View>
+        
+        {/* Legend - moved to the right with clear separation */}
+        <View style={styles.legendContainer}>
+          {chartData.map((item, index) => {
+            // Calculate percentage
+            const percentage = Math.round((item.cost / total) * 100);
+            
+            return (
+              <View key={index} style={styles.legendItem}>
+                <View style={[styles.legendColor, { backgroundColor: item.color }]} />
+                <Text numberOfLines={1} ellipsizeMode="tail" style={styles.legendText}>
+                  {item.name}
+                </Text>
+                <Text style={styles.legendPercentage}>{percentage}%</Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -115,8 +147,8 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
+    padding: 12,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -125,37 +157,51 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#333',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  chartAndLegendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   chartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 220,
+    width: '40%',
   },
   legendContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    width: '60%',
+    flexDirection: 'column',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
+    alignItems: 'flex-start',
+    paddingLeft: 20,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 10,
-    marginBottom: 8,
+    marginBottom: 6,
+    width: '100%',
   },
   legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
   },
   legendText: {
     fontSize: 12,
     color: '#333',
+    flex: 1,
+    marginRight: 8,
+  },
+  legendPercentage: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    width: 35,
+    textAlign: 'right',
   },
 }); 
