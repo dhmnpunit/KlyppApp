@@ -63,7 +63,7 @@ const THEME = {
     secondary: '#444444',
     tertiary: '#888888'
   },
-  background: '#F7F8FA',
+  background: '#F2F3F5', // Slightly darker background
   card: '#FFFFFF',
   border: '#F0F0F0'
 };
@@ -518,27 +518,6 @@ export const DashboardScreen = () => {
           </View>
         </View>
         
-        {/* Welcome card for new users */}
-        {filteredSubscriptions.length === 0 && (
-          <View style={styles.welcomeCard}>
-            <View style={styles.welcomeIconContainer}>
-              <Ionicons 
-                name="hand-left" 
-                size={22} 
-                color={THEME.primary}
-                style={Platform.OS === 'android' ? { marginLeft: 2 } : {}} // Adjust position on Android
-              />
-            </View>
-            <View style={styles.welcomeContent}>
-              <Text style={styles.welcomeTitle}>Welcome to Klypp</Text>
-              <Text style={styles.welcomeText}>
-                Add your first subscription to start tracking your expenses
-              </Text>
-            </View>
-            <Text style={styles.swipeText}>Swipe</Text>
-          </View>
-        )}
-        
         {/* Category filter as pills */}
         <View style={styles.categoryFilterSection}>
           <ScrollView 
@@ -820,74 +799,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
-  welcomeCard: {
-    backgroundColor: THEME.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  welcomeIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background to match action buttons
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    // Use platform-specific styling
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: {
-        // Remove elevation which causes the shadow
-        elevation: 0,
-        // Use a subtle border instead
-        borderWidth: 0.5,
-        borderColor: 'rgba(0,0,0,0.05)',
-        overflow: 'hidden',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      }
-    })
-  },
-  welcomeContent: {
-    flex: 1,
-  },
-  welcomeTitle: {
-    fontFamily: fontStyles.semiBold,
-    fontSize: 16,
-    color: THEME.text.primary,
-    marginBottom: 4,
-  },
-  welcomeText: {
-    fontFamily: fontStyles.regular,
-    fontSize: 14,
-    color: THEME.text.secondary,
-    lineHeight: 20,
-  },
-  swipeText: {
-    position: 'absolute',
-    right: 16,
-    fontFamily: fontStyles.regular,
-    fontSize: 14,
-    color: '#BBBBBB',
-  },
   categoryFilterSection: {
     marginBottom: 16,
   },
@@ -905,10 +816,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   categoryPillSelected: {
     backgroundColor: THEME.primary,
+    borderWidth: 0,
   },
   categoryPillText: {
     fontFamily: fontStyles.medium,
@@ -967,14 +881,9 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.card,
     borderRadius: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: '#F0F0F0',
   },
   subscriptionContent: {
     flexDirection: 'row',
