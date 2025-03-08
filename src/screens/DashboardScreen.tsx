@@ -228,33 +228,85 @@ export const DashboardScreen = () => {
     navigation.navigate('SubscriptionDetails', { subscriptionId });
   };
 
-  const renderSubscriptionItem = ({ item }: { item: Subscription }) => (
-    <TouchableOpacity 
-      key={item.subscription_id}
-      style={styles.subscriptionCard}
-      onPress={() => handleSubscriptionPress(item.subscription_id)}
-    >
-      <View style={styles.subscriptionHeader}>
-        <Text style={styles.subscriptionName}>{item.name}</Text>
-        <Text style={styles.subscriptionCost}>
-          ${item.cost.toFixed(2)}/{item.renewal_frequency}
-        </Text>
-      </View>
-      
-      <View style={styles.subscriptionDetails}>
-        <Text style={styles.subscriptionCategory}>{item.category}</Text>
-        <Text style={styles.subscriptionRenewal}>
-          Next renewal: {new Date(item.next_renewal_date).toLocaleDateString()}
-        </Text>
-      </View>
-      
-      {item.is_shared && (
-        <View style={styles.subscriptionSharedBadge}>
-          <Text style={styles.sharedText}>Shared</Text>
+  const renderSubscriptionItem = ({ item }: { item: Subscription }) => {
+    // Format the renewal date in a more readable way
+    const renewalDate = new Date(item.next_renewal_date);
+    const formattedDate = renewalDate.toLocaleDateString(undefined, { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+    
+    // Calculate days until renewal
+    const today = new Date();
+    const daysUntilRenewal = Math.ceil((renewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const isRenewalSoon = daysUntilRenewal <= 7;
+    
+    return (
+      <TouchableOpacity 
+        key={item.subscription_id}
+        style={styles.subscriptionCard}
+        onPress={() => handleSubscriptionPress(item.subscription_id)}
+      >
+        {/* Left side with name and category */}
+        <View style={styles.subscriptionLeftSection}>
+          <View style={styles.subscriptionNameRow}>
+            <Text style={styles.subscriptionName}>{item.name}</Text>
+            {item.is_shared && (
+              <View style={styles.sharedBadge}>
+                <Text style={styles.subscriptionSharedText}>Shared</Text>
+              </View>
+            )}
+          </View>
+          
+          <View style={[
+            styles.categoryBadge, 
+            { backgroundColor: getCategoryColor(item.category) }
+          ]}>
+            <Text style={styles.categoryText}>{item.category}</Text>
+          </View>
         </View>
-      )}
-    </TouchableOpacity>
-  );
+        
+        {/* Right side with cost and renewal */}
+        <View style={styles.subscriptionRightSection}>
+          <Text style={styles.subscriptionCost}>
+            ${item.cost.toFixed(2)}<Text style={styles.subscriptionFrequency}>/{item.renewal_frequency}</Text>
+          </Text>
+          
+          <View style={styles.renewalContainer}>
+            <Text style={[
+              styles.renewalText,
+              isRenewalSoon && styles.renewalSoonText
+            ]}>
+              {isRenewalSoon ? 'Renews soon' : 'Next renewal'}
+            </Text>
+            <Text style={[
+              styles.renewalDate,
+              isRenewalSoon && styles.renewalSoonDate
+            ]}>
+              {formattedDate}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  
+  // Helper function to get a color based on category
+  const getCategoryColor = (category: string): string => {
+    const categoryColors: {[key: string]: string} = {
+      'Entertainment': 'rgba(52, 152, 219, 0.1)',
+      'Productivity': 'rgba(46, 204, 113, 0.1)',
+      'Utilities': 'rgba(155, 89, 182, 0.1)',
+      'Health & Fitness': 'rgba(231, 76, 60, 0.1)',
+      'Food & Drink': 'rgba(241, 196, 15, 0.1)',
+      'Shopping': 'rgba(230, 126, 34, 0.1)',
+      'Education': 'rgba(52, 73, 94, 0.1)',
+      'Other': 'rgba(149, 165, 166, 0.1)'
+    };
+    
+    return categoryColors[category] || 'rgba(149, 165, 166, 0.1)';
+  };
 
   const renderCategoryFilter = () => (
     <View style={styles.categoryFilterWrapper}>
@@ -622,62 +674,97 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   subscriptionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 1,
-  },
-  subscriptionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  subscriptionLeftSection: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  subscriptionNameRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    flexWrap: 'wrap',
+    marginBottom: 4,
   },
   subscriptionName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontFamily: fontStyles.semiBold,
+    fontSize: 17,
+    color: colors.text.primary,
+    marginRight: 8,
+    flexShrink: 1,
+  },
+  sharedBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  subscriptionSharedText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: '#4CAF50',
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  categoryText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: colors.text.tertiary,
+  },
+  subscriptionRightSection: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
   subscriptionCost: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#008CFF',
+    fontFamily: fontStyles.bold,
+    fontSize: 17,
+    color: colors.primary,
+    marginBottom: 4,
   },
-  subscriptionDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  subscriptionFrequency: {
+    fontFamily: fontStyles.regular,
+    fontSize: 13,
+    color: colors.text.tertiary,
   },
-  subscriptionCategory: {
-    fontSize: 14,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  renewalContainer: {
+    alignItems: 'flex-end',
   },
-  subscriptionRenewal: {
-    fontSize: 14,
-    color: '#666',
-  },
-  subscriptionSharedBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  sharedText: {
-    color: '#fff',
+  renewalText: {
+    fontFamily: fontStyles.regular,
     fontSize: 12,
-    fontWeight: '500',
+    color: colors.text.tertiary,
+    marginBottom: 2,
+  },
+  renewalDate: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: colors.text.secondary,
+  },
+  renewalSoonText: {
+    color: colors.error,
+  },
+  renewalSoonDate: {
+    color: colors.error,
+    fontFamily: fontStyles.semiBold,
   },
   addButton: {
     position: 'absolute',
