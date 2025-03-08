@@ -71,6 +71,7 @@ const THEME = {
 export const DashboardScreen = () => {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { subscriptions, fetchSubscriptions, loading, error } = useSubscriptionStore();
+  const { user, profile, fetchProfile, ensureProfileExists } = useAuthStore();
   const { signOut } = useAuthStore();
   
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -163,21 +164,27 @@ export const DashboardScreen = () => {
     return costDifference;
   };
 
-  // Use useFocusEffect to refresh subscriptions when the screen comes into focus
+  // Use useFocusEffect to refresh subscriptions and profile when the screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log('Dashboard screen focused, refreshing subscriptions...');
+      console.log('Dashboard screen focused, refreshing data...');
       fetchSubscriptions();
+      fetchProfile(); // Fetch the user profile when screen is focused
       return () => {
         // Cleanup function (optional)
       };
-    }, [fetchSubscriptions])
+    }, [fetchSubscriptions, fetchProfile])
   );
 
-  // Keep the existing useEffect for initial load (optional)
+  // Keep the existing useEffect for initial load
   useEffect(() => {
     // Initial fetch when component mounts
     fetchSubscriptions();
+    
+    // Ensure the user profile exists and is loaded
+    ensureProfileExists().then(() => {
+      fetchProfile(); // Fetch the profile after ensuring it exists
+    });
   }, []);
 
   useEffect(() => {
@@ -391,17 +398,17 @@ export const DashboardScreen = () => {
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
             <Text style={styles.profileInitial}>
-              {useAuthStore.getState().profile?.username?.charAt(0).toUpperCase() || 'K'}
+              {(profile?.name?.charAt(0) || profile?.username?.charAt(0) || 'K').toUpperCase()}
             </Text>
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.username}>
-              {useAuthStore.getState().profile?.username || 'User'}
+              {profile?.name || profile?.username || 'User'}
             </Text>
             <View style={styles.walletAddressContainer}>
               <Text style={styles.walletAddress}>
                 {(() => {
-                  const userId = useAuthStore.getState().user?.id;
+                  const userId = user?.id;
                   if (!userId) return '';
                   return `${userId.substring(0, 8)}...${userId.substring(userId.length - 4)}`;
                 })()}
