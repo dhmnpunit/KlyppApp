@@ -17,6 +17,7 @@ import { useSubscriptionStore } from '../store/subscriptionStore';
 import { useAuthStore } from '../store/authStore';
 import { Subscription } from '../store/subscriptionStore';
 import { DonutChart } from '../components/DonutChart';
+import { fontStyles, textStyles, colors } from '../utils/globalStyles';
 
 type DashboardScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
 
@@ -466,7 +467,7 @@ export const DashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -475,14 +476,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     paddingTop: 44, // For status bar
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderBottomColor: colors.border,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    ...textStyles.h2,
+    color: colors.text.primary,
   },
   headerButtons: {
     flexDirection: 'row',
@@ -496,12 +496,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   sortButtonText: {
-    color: '#333',
-    fontSize: 14,
+    ...textStyles.bodySmall,
+    color: colors.text.tertiary,
   },
   signOutText: {
-    color: '#008CFF',
-    fontSize: 16,
+    ...textStyles.body,
+    color: colors.primary,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    padding: 16,
+    paddingBottom: 100, // Extra space at the bottom for the add button
   },
   summaryRow: {
     flexDirection: 'row',
@@ -509,7 +516,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
     flex: 1,
@@ -520,35 +527,36 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: colors.border,
   },
   summaryTitle: {
-    color: '#666',
-    fontSize: 15,
-    fontWeight: '500',
+    ...textStyles.label,
+    color: colors.text.tertiary,
     marginBottom: 6,
   },
   amountRow: {
     marginBottom: 4,
   },
   summaryAmount: {
-    color: '#000',
+    fontFamily: fontStyles.bold,
     fontSize: 26,
-    fontWeight: 'bold',
+    color: colors.text.primary,
   },
   costTrend: {
-    fontSize: 13,
+    ...textStyles.caption,
   },
   costIncrease: {
-    color: '#E74C3C',
-    fontWeight: '500',
+    fontFamily: fontStyles.medium,
+    fontSize: 13,
+    color: colors.error,
   },
   costDecrease: {
-    color: '#2ECC71',
-    fontWeight: '500',
+    fontFamily: fontStyles.medium,
+    fontSize: 13,
+    color: colors.success,
   },
   activeSubscriptionsCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
     flex: 1,
@@ -559,18 +567,17 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: colors.border,
   },
   activeSubscriptionsTitle: {
-    color: '#666',
-    fontSize: 15,
-    fontWeight: '500',
+    ...textStyles.label,
+    color: colors.text.tertiary,
     marginBottom: 6,
   },
   activeSubscriptionsCount: {
-    color: '#000',
+    fontFamily: fontStyles.bold,
     fontSize: 26,
-    fontWeight: 'bold',
+    color: colors.text.primary,
   },
   sharedBadgeContainer: {
     backgroundColor: '#F5F5F5',
@@ -581,9 +588,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sharedBadgeText: {
-    color: '#666',
-    fontSize: 13,
-    fontWeight: '500',
+    ...textStyles.caption,
+    color: colors.text.tertiary,
   },
   categoryFilterWrapper: {
     marginTop: 8,
@@ -611,13 +617,6 @@ const styles = StyleSheet.create({
   },
   categoryFilterTextSelected: {
     color: '#fff',
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContentContainer: {
-    padding: 16,
-    paddingBottom: 100, // Extra space at the bottom for the add button
   },
   subscriptionsList: {
     marginTop: 8,

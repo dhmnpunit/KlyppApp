@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Svg, { G, Circle, Path, Text as SvgText } from 'react-native-svg';
+import { fontStyles, textStyles, colors } from '../utils/globalStyles';
 
 interface ChartData {
   name: string;
@@ -44,7 +45,7 @@ export const DonutChart = ({ data }: DonutChartProps) => {
   
   // Chart dimensions
   const width = screenWidth - 40;
-  const height = 140; // Reduced height
+  const height = 150; // Further reduced height
   
   // Calculate chart dimensions
   const chartSize = Math.min(width * 0.4, height); // Use the smaller dimension
@@ -145,9 +146,9 @@ export const DonutChart = ({ data }: DonutChartProps) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 12,
+    padding: 14,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -156,10 +157,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   title: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    ...textStyles.h4,
+    marginBottom: 10,
     textAlign: 'center',
   },
   chartAndLegendContainer: {
@@ -170,19 +169,20 @@ const styles = StyleSheet.create({
   chartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40%',
+    height: 150,
+    width: '50%',
   },
   legendContainer: {
-    width: '60%',
+    width: '50%',
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    paddingLeft: 20,
+    paddingLeft: 10,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 5,
     width: '100%',
   },
   legendColor: {
@@ -192,16 +192,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   legendText: {
-    fontSize: 12,
-    color: '#333',
+    ...textStyles.bodySmall,
     flex: 1,
-    marginRight: 8,
   },
   legendPercentage: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-    width: 35,
-    textAlign: 'right',
+    ...textStyles.caption,
+    color: colors.text.tertiary,
   },
 }); 
