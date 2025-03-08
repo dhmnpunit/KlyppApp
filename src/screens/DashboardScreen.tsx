@@ -206,7 +206,7 @@ export const DashboardScreen = () => {
   }, [subscriptions, selectedCategory, sortOption]);
 
   const handleAddSubscription = () => {
-    navigation.navigate('AddSubscription');
+    navigation.navigate('SubscriptionsList');
   };
 
   const handleSubscriptionPress = (subscriptionId: string) => {

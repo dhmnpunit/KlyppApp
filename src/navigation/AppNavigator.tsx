@@ -5,6 +5,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { supabase } from '../services/supabase';
 import { useAuthStore } from '../store/authStore';
 import { Session } from '@supabase/supabase-js';
+import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'react-native';
 
 // Import screens
 import { LandingScreen } from '../screens/LandingScreen';
@@ -17,6 +19,7 @@ import { SubscriptionDetailsScreen } from '../screens/SubscriptionDetailsScreen'
 import { EditSubscriptionScreen } from '../screens/EditSubscriptionScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { SubscriptionsListScreen } from '../screens/SubscriptionsListScreen';
 
 // Main app screens
 
@@ -36,6 +39,7 @@ export type MainTabParamList = {
 
 export type MainStackParamList = {
   MainTabs: undefined;
+  SubscriptionsList: undefined;
   AddSubscription: undefined;
   SubscriptionDetails: { subscriptionId: string };
   EditSubscription: { subscriptionId: string };
@@ -89,6 +93,11 @@ const MainStackNavigator = () => {
         name="MainTabs" 
         component={MainTabNavigator} 
         options={{ headerShown: false }}
+      />
+      <MainStack.Screen 
+        name="SubscriptionsList" 
+        component={SubscriptionsListScreen} 
+        options={{ title: 'Subscriptions List' }}
       />
       <MainStack.Screen 
         name="AddSubscription" 
