@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -18,18 +18,7 @@ import { useSubscriptionStore, Subscription } from '../store/subscriptionStore';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../services/supabase';
 import { invitationService } from '../services/invitationService';
-import { RealtimeChannel } from '@supabase/supabase-js';
-
-// Define types for subscription members
-interface SubscriptionMember {
-  user_id: string;
-  status: string;
-  joined_at: string | null;
-  users?: {
-    username?: string | null;
-    name?: string | null;
-  };
-}
+import { useAlert } from '../context/AlertContext';
 
 type SubscriptionDetailsScreenNavigationProp = NativeStackNavigationProp<
   MainStackParamList,
@@ -63,10 +52,34 @@ export const SubscriptionDetailsScreen = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [members, setMembers] = useState<SubscriptionMember[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  
+  // Use the alert context instead of local state
+  const { showAlert } = useAlert();
+
+  // Define fetchMembers outside useEffect so it can be called from other functions
+  const fetchMembers = async () => {
+    if (!subscriptionId) return;
+    
+    setMembersLoading(true);
+    try {
+      console.log('Fetching members for subscription:', subscriptionId);
+      const result = await invitationService.getSubscriptionMembers(subscriptionId);
+      console.log('Members fetch result:', result);
+      if (result.success && result.data) {
+        setMembers(result.data);
+      } else {
+        console.error('Error fetching members:', result.error);
+      }
+    } catch (error) {
+      console.error('Error in fetchMembers:', error);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
 
   // Get current user ID directly from Supabase
   useEffect(() => {
@@ -97,109 +110,63 @@ export const SubscriptionDetailsScreen = () => {
 
   useEffect(() => {
     // Get subscription details
-    const sub = getSubscriptionById(subscriptionId);
-    if (sub) {
-      setSubscription(sub);
-      
-      // Check if current user is the admin
-      if (currentUserId && sub.admin_id) {
-        const adminCheck = currentUserId === sub.admin_id;
-        setIsAdmin(adminCheck);
+    const loadSubscription = async () => {
+      setLoading(true);
+      try {
+        // First try to get from local state
+        const sub = getSubscriptionById(subscriptionId);
+        
+        if (sub) {
+          console.log('Subscription found in local state:', sub);
+          setSubscription(sub);
+          
+          // Check if current user is the admin
+          if (currentUserId && sub.admin_id) {
+            const adminCheck = currentUserId === sub.admin_id;
+            setIsAdmin(adminCheck);
+            console.log('Is current user admin?', adminCheck);
+          }
+        } else {
+          // If not found in local state, fetch directly from database
+          console.log('Subscription not found in local state, fetching from database');
+          const { data, error } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('subscription_id', subscriptionId)
+            .single();
+            
+          if (error) {
+            console.error('Error fetching subscription:', error);
+            setError('Failed to load subscription details');
+          } else if (data) {
+            console.log('Subscription fetched from database:', data);
+            setSubscription(data);
+            
+            // Check if current user is the admin
+            if (currentUserId && data.admin_id) {
+              const adminCheck = currentUserId === data.admin_id;
+              setIsAdmin(adminCheck);
+              console.log('Is current user admin?', adminCheck);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error in loadSubscription:', err);
+        setError('An unexpected error occurred');
+      } finally {
+        setLoading(false);
       }
+    };
+
+    if (subscriptionId && currentUserId) {
+      loadSubscription();
     }
   }, [subscriptionId, getSubscriptionById, currentUserId]);
 
-  // Function to fetch subscription members
-  const fetchMembers = async () => {
-    if (!subscriptionId) return;
-    
-    setMembersLoading(true);
-    try {
-      console.log('Fetching members for subscription:', subscriptionId);
-      const result = await invitationService.getSubscriptionMembers(subscriptionId);
-      console.log('Members fetch result:', result);
-      if (result.success && result.data) {
-        // Log the structure of the first member to understand the data format
-        if (result.data.length > 0) {
-          console.log('First member structure:', JSON.stringify(result.data[0], null, 2));
-        }
-        setMembers(result.data as SubscriptionMember[]);
-      } else {
-        console.error('Error fetching members:', result.error);
-      }
-    } catch (error) {
-      console.error('Error in fetchMembers:', error);
-    } finally {
-      setMembersLoading(false);
-    }
-  };
-
-  // Fetch members when the component mounts or subscription ID changes
+  // Add a new useEffect to fetch subscription members
   useEffect(() => {
     fetchMembers();
-    
-    // Set up real-time subscription for member changes
-    let memberSubscription: RealtimeChannel | null = null;
-    
-    try {
-      console.log('Setting up real-time subscription for members of subscription:', subscriptionId);
-      memberSubscription = supabase
-        .channel(`subscription-members-${subscriptionId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
-            schema: 'public',
-            table: 'subscription_members',
-            filter: `subscription_id=eq.${subscriptionId}`,
-          },
-          (payload) => {
-            console.log('Subscription member change detected:', payload);
-            // Refresh members list when changes occur
-            fetchMembers();
-          }
-        )
-        .subscribe((status) => {
-          console.log('Member subscription status:', status);
-        });
-    } catch (error) {
-      console.error('Error setting up real-time subscription for members:', error);
-      // Continue without real-time updates
-    }
-    
-    return () => {
-      if (memberSubscription) {
-        console.log('Removing member subscription channel');
-        supabase.removeChannel(memberSubscription);
-      }
-    };
   }, [subscriptionId]);
-
-  const handleDeleteSubscription = () => {
-    Alert.alert(
-      'Delete Subscription',
-      'Are you sure you want to delete this subscription?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteSubscription(subscriptionId);
-              navigation.goBack();
-            } catch (error) {
-              console.error('Error deleting subscription:', error);
-              Alert.alert('Error', 'Failed to delete subscription');
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const handleShareSubscription = async () => {
     if (!subscription) return;
@@ -237,34 +204,99 @@ export const SubscriptionDetailsScreen = () => {
 
     setInviteLoading(true);
     try {
-      // Check if the subscription has a max_members limit
-      if (subscription?.is_shared && subscription?.max_members) {
-        // Get current member count
-        const currentMemberCount = members.length;
-        
-        // Check if adding one more would exceed the limit
-        if (currentMemberCount >= subscription.max_members) {
-          Alert.alert(
-            'Member Limit Reached', 
-            `This subscription has a limit of ${subscription.max_members} members. You cannot invite more members.`
-          );
-          return;
-        }
+      const username = inviteUsername.trim();
+      console.log('Inviting user:', username, 'to subscription:', subscriptionId);
+      
+      // First, check if the user exists
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('username', username);
+      
+      if (userError) {
+        console.error('Error checking if user exists:', userError);
+        Alert.alert('Error', 'Could not check if user exists. Please try again.');
+        return;
       }
       
-      // Use the invitationService to invite the user
-      const result = await invitationService.inviteUserByUsername(subscriptionId, inviteUsername.trim());
+      if (!userData || userData.length === 0) {
+        console.log('User not found:', username);
+        Alert.alert('User Not Found', `No user found with username "${username}". Please check the username and try again.`);
+        return;
+      }
       
-      if (result.success) {
-        Alert.alert('Success', `Invitation sent to ${inviteUsername}. They will receive a notification to join the subscription.`);
-        setInviteUsername('');
-        setShowInviteModal(false);
+      // User exists, get their ID
+      const userId = userData[0].user_id;
+      console.log('User found with ID:', userId);
+      
+      // Check if the user is already a member
+      const { data: memberData, error: memberError } = await supabase
+        .from('subscription_members')
+        .select('*')
+        .eq('subscription_id', subscriptionId)
+        .eq('user_id', userId);
         
-        // Refresh the members list
-        fetchMembers();
+      if (memberError) {
+        console.error('Error checking membership:', memberError);
+        Alert.alert('Error', 'Could not check if user is already a member. Please try again.');
+        return;
+      }
+      
+      if (memberData && memberData.length > 0) {
+        console.log('User is already a member:', memberData);
+        Alert.alert('Already a Member', `User "${username}" is already a member of this subscription.`);
+        return;
+      }
+      
+      // Add the user to subscription_members
+      const { data: insertData, error: insertError } = await supabase
+        .from('subscription_members')
+        .insert([
+          {
+            subscription_id: subscriptionId,
+            user_id: userId,
+            status: 'pending',
+          },
+        ])
+        .select();
+        
+      if (insertError) {
+        console.error('Error adding member:', insertError);
+        Alert.alert('Error', 'Could not add user as a member. Please try again.');
+        return;
+      }
+      
+      console.log('Member added successfully:', insertData);
+      
+      // Create a notification for the user
+      const { data: notificationData, error: notificationError } = await supabase
+        .from('notifications')
+        .insert([
+          {
+            user_id: userId,
+            subscription_id: subscriptionId,
+            message: `You have been invited to join the ${subscription?.name} subscription`,
+            type: 'invite',
+            status: 'unread',
+          },
+        ])
+        .select();
+        
+      if (notificationError) {
+        console.error('Error creating notification:', notificationError);
+        // Continue anyway as the member has been added
       } else {
-        Alert.alert('Error', result.error || 'Failed to invite user');
+        console.log('Notification created successfully:', notificationData);
       }
+      
+      // Success!
+      Alert.alert('Success', `Invitation sent to ${username}. They will receive a notification to join the subscription.`);
+      setInviteUsername('');
+      setShowInviteModal(false);
+      
+      // Refresh the members list
+      fetchMembers();
+      
     } catch (error) {
       console.error('Error inviting user:', error);
       Alert.alert('Error', 'An unexpected error occurred while sending the invitation. Please try again later.');
@@ -414,68 +446,6 @@ export const SubscriptionDetailsScreen = () => {
       );
     }
 
-    const handleRemoveMember = async (userId: string, username: string) => {
-      Alert.alert(
-        'Remove Member',
-        `Are you sure you want to remove ${username} from this subscription?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const result = await invitationService.removeMember(subscriptionId, userId);
-                if (result.success) {
-                  Alert.alert('Success', 'Member removed successfully');
-                  fetchMembers(); // Refresh the members list
-                } else {
-                  Alert.alert('Error', result.error || 'Failed to remove member');
-                }
-              } catch (error) {
-                console.error('Error removing member:', error);
-                Alert.alert('Error', 'An unexpected error occurred');
-              }
-            },
-          },
-        ]
-      );
-    };
-
-    const handleLeaveSubscription = async () => {
-      Alert.alert(
-        'Leave Subscription',
-        'Are you sure you want to leave this subscription?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Leave',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const result = await invitationService.leaveSubscription(subscriptionId);
-                if (result.success) {
-                  Alert.alert('Success', 'You have left the subscription');
-                  navigation.goBack(); // Go back to the previous screen
-                } else {
-                  Alert.alert('Error', result.error || 'Failed to leave subscription');
-                }
-              } catch (error) {
-                console.error('Error leaving subscription:', error);
-                Alert.alert('Error', 'An unexpected error occurred');
-              }
-            },
-          },
-        ]
-      );
-    };
-
     return (
       <View style={styles.membersContainer}>
         {members.map((member) => (
@@ -493,34 +463,86 @@ export const SubscriptionDetailsScreen = () => {
                 {member.status === 'accepted' ? 'Member' : 'Pending'}
               </Text>
             </View>
-            
-            {/* Admin can remove members */}
-            {isAdmin && member.user_id !== currentUserId && (
-              <TouchableOpacity
-                style={styles.removeMemberButton}
-                onPress={() => handleRemoveMember(
-                  member.user_id, 
-                  member.users?.name || member.users?.username || 'this user'
-                )}
-              >
-                <Text style={styles.removeMemberButtonText}>Remove</Text>
-              </TouchableOpacity>
-            )}
-            
-            {/* Current user can leave if they're not the admin */}
-            {!isAdmin && member.user_id === currentUserId && (
-              <TouchableOpacity
-                style={styles.leaveButton}
-                onPress={handleLeaveSubscription}
-              >
-                <Text style={styles.leaveButtonText}>Leave</Text>
-              </TouchableOpacity>
-            )}
           </View>
         ))}
       </View>
     );
   };
+
+  // Function to show delete confirmation
+  const showDeleteConfirmation = useCallback(() => {
+    console.log('showDeleteConfirmation called');
+    const message = subscription?.is_shared
+      ? `Are you sure you want to delete "${subscription.name}"? This will permanently remove the subscription and all members will lose access. This action cannot be undone.`
+      : `Are you sure you want to delete "${subscription?.name}"? This action cannot be undone.`;
+      
+    showAlert(
+      message,
+      'Confirm Deletion',
+      async () => {
+        try {
+          console.log('Starting deletion process for subscription:', subscriptionId);
+          
+          const result = await deleteSubscription(subscriptionId);
+          
+          if (result.success) {
+            console.log('Deletion successful');
+            // Don't show success message here, we'll do it after the alert is closed
+            return new Promise<void>((resolve) => {
+              setTimeout(() => {
+                // Show success message after the confirmation dialog is closed
+                showAlert('Subscription deleted successfully', 'Success', () => {
+                  navigation.goBack();
+                });
+                resolve();
+              }, 300); // Small delay to ensure the first alert is fully closed
+            });
+          } else {
+            console.error('Deletion failed with result:', result);
+            
+            // Extract a more detailed error message
+            let errorMessage = 'Failed to delete subscription';
+            
+            if (result.error) {
+              if (typeof result.error === 'object') {
+                if ('message' in result.error) {
+                  errorMessage = String(result.error.message);
+                } else if ('details' in result.error) {
+                  errorMessage = String(result.error.details);
+                }
+              } else {
+                errorMessage = String(result.error);
+              }
+            }
+            
+            console.error('Showing error message:', errorMessage);
+            // Return a promise that resolves after showing the error message
+            return new Promise<void>((resolve) => {
+              setTimeout(() => {
+                showAlert(errorMessage, 'Error');
+                resolve();
+              }, 300);
+            });
+          }
+        } catch (error) {
+          console.error('Exception in delete process:', error);
+          
+          // Get a more detailed error message
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : 'An unexpected error occurred';
+            
+          // Return a promise that resolves after showing the error message
+          return new Promise<void>((resolve) => {
+            setTimeout(() => {
+              showAlert(errorMessage, 'Error');
+              resolve();
+            }, 300);
+          });
+        }
+      }
+    );
+  }, [subscription, subscriptionId, showAlert, deleteSubscription, navigation]);
 
   if (loading || subscriptionLoading) {
     return (
@@ -559,8 +581,9 @@ export const SubscriptionDetailsScreen = () => {
     );
   }
 
-  // Direct check for admin status in render method
-  const isCurrentUserAdmin = currentUserId && currentUserId === subscription.admin_id;
+  // Use the isAdmin state that's set in useEffect instead of calculating it here
+  // This ensures it's properly set even if the subscription is loaded from the database
+  const isCurrentUserAdmin = isAdmin;
 
   return (
     <ScrollView style={styles.container}>
@@ -636,40 +659,48 @@ export const SubscriptionDetailsScreen = () => {
         <Text style={styles.sectionTitle}>Actions</Text>
         
         {isCurrentUserAdmin ? (
-          <View>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => navigation.navigate('EditSubscription', { subscriptionId })}
-            >
-              <Text style={styles.editButtonText}>Edit Subscription</Text>
-            </TouchableOpacity>
+          (() => {
+            console.log('Rendering admin actions, isCurrentUserAdmin:', isCurrentUserAdmin);
+            return (
+              <View>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => navigation.navigate('EditSubscription', { subscriptionId })}
+                >
+                  <Text style={styles.editButtonText}>Edit Subscription</Text>
+                </TouchableOpacity>
 
-            {!subscription.is_shared && (
-              <TouchableOpacity
-                style={[styles.shareButton, { marginTop: 12 }]}
-                onPress={handleConvertToShared}
-              >
-                <Text style={styles.shareButtonText}>Convert to Shared</Text>
-              </TouchableOpacity>
-            )}
+                {!subscription.is_shared && (
+                  <TouchableOpacity
+                    style={[styles.shareButton, { marginTop: 12 }]}
+                    onPress={handleConvertToShared}
+                  >
+                    <Text style={styles.shareButtonText}>Convert to Shared</Text>
+                  </TouchableOpacity>
+                )}
 
-            <TouchableOpacity
-              style={[styles.deleteButton, { marginTop: 12 }]}
-              onPress={handleDeleteSubscription}
-            >
-              <Text style={styles.deleteButtonText}>Delete Subscription</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, { marginTop: 12 }]}
-              onPress={() => {
-                setShowDebug(true);
-                fetchAllUsers();
-              }}
-            >
-              <Text style={styles.actionButtonText}>Show Debug Info</Text>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  style={[styles.deleteButton, { marginTop: 12 }]}
+                  onPress={() => {
+                    console.log('Delete button pressed');
+                    showDeleteConfirmation();
+                  }}
+                >
+                  <Text style={styles.deleteButtonText}>Delete Subscription</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionButton, { marginTop: 12 }]}
+                  onPress={() => {
+                    setShowDebug(true);
+                    fetchAllUsers();
+                  }}
+                >
+                  <Text style={styles.actionButtonText}>Show Debug Info</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()
         ) : (
           <Text style={styles.emptyText}>
             Only the subscription admin can edit or delete this subscription.
@@ -862,25 +893,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   membersContainer: {
-    marginTop: 8,
+    marginBottom: 8,
   },
   memberItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#008CFF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -888,8 +913,8 @@ const styles = StyleSheet.create({
   },
   memberAvatarText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   memberInfo: {
     flex: 1,
@@ -898,7 +923,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
-    marginBottom: 4,
   },
   memberStatus: {
     fontSize: 14,
@@ -1032,29 +1056,5 @@ const styles = StyleSheet.create({
   debugButtonText: {
     color: '#fff',
     fontSize: 14,
-  },
-  removeMemberButton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginLeft: 'auto',
-  },
-  removeMemberButtonText: {
-    color: '#ff3b30',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  leaveButton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginLeft: 'auto',
-  },
-  leaveButtonText: {
-    color: '#ff3b30',
-    fontSize: 14,
-    fontWeight: '500',
   },
 }); 

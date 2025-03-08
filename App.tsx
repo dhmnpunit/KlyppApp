@@ -5,6 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import * as Font from 'expo-font';
 import { View, Text } from 'react-native';
+import { AlertProvider } from './src/context/AlertContext';
+import { CustomAlert } from './src/components/CustomAlert';
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -38,8 +40,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <GluestackUIProvider>
-        <StatusBar style="auto" />
-        <AppNavigator />
+        <AlertProvider>
+          <StatusBar style="auto" />
+          <AppNavigator />
+          <CustomAlert />
+        </AlertProvider>
       </GluestackUIProvider>
     </SafeAreaProvider>
   );
