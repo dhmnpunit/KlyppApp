@@ -777,7 +777,7 @@ export const SubscriptionDetailsScreen = () => {
                 accessibilityLabel="Invite members"
                 accessibilityRole="button"
               >
-                <Ionicons name="person-add" size={18} color="#FFFFFF" style={styles.buttonIcon} />
+                <Ionicons name="person-add" size={16} color={THEME.primary} />
                 <Text style={styles.inviteButtonText}>Invite</Text>
               </TouchableOpacity>
             )}
@@ -1030,7 +1030,7 @@ const styles = StyleSheet.create({
   editButton: {
     backgroundColor: '#7B3FD9', // Slightly desaturated purple
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
     flex: 1,
@@ -1042,7 +1042,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E53935', // Slightly muted red
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
     flex: 1,
@@ -1050,15 +1050,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   editButtonText: {
-    fontFamily: fontStyles.semiBold,
+    fontFamily: fontStyles.medium,
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     marginLeft: 8,
   },
   deleteButtonText: {
-    fontFamily: fontStyles.semiBold,
+    fontFamily: fontStyles.medium,
     color: '#E53935', // Matching border color
-    fontSize: 16,
+    fontSize: 15,
     marginLeft: 8,
   },
   convertContainer: {
@@ -1241,19 +1241,21 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   inviteButton: {
-    backgroundColor: THEME.primary,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Very light purple
+    borderWidth: 1,
+    borderColor: THEME.primary,
+    borderRadius: 50,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   inviteButtonText: {
     fontFamily: fontStyles.medium,
-    color: '#FFFFFF',
-    fontSize: 16,
-    marginLeft: 8,
+    color: THEME.primary,
+    fontSize: 14,
+    marginLeft: 6,
   },
   modalContainer: {
     flex: 1,

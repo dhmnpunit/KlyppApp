@@ -8,7 +8,7 @@ export interface UserProfile {
   username: string | null;
   name: string | null;
   currency: string;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
   created_at: string;
 }
 
@@ -19,6 +19,7 @@ interface AuthState {
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
+  isFetchingProfile: boolean;
   
   // Auth methods
   signUp: (email: string, password: string, username: string) => Promise<{ success: boolean; error?: string }>;
@@ -41,6 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profile: null,
   loading: false,
   error: null,
+  isFetchingProfile: false,
 
   // Ensure user profile exists
   ensureProfileExists: async () => {
@@ -374,6 +376,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Fetch the user profile
   fetchProfile: async () => {
+    // Prevent multiple rapid calls
+    if (get().isFetchingProfile) {
+      console.log('Profile fetch already in progress, skipping duplicate call');
+      return;
+    }
+    
+    set({ isFetchingProfile: true });
+    
     // First, get the current user directly from Supabase to ensure we have the latest data
     const { data: authData, error: authError } = await supabase.auth.getUser();
     
@@ -381,14 +391,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('Error getting current user in fetchProfile:', authError);
       set({ 
         error: authError.message, 
-        loading: false 
+        loading: false,
+        isFetchingProfile: false
       });
       return;
     }
     
     if (!authData || !authData.user) {
       console.log('No authenticated user found in fetchProfile');
-      set({ loading: false });
+      set({ loading: false, isFetchingProfile: false });
       return;
     }
     
@@ -413,6 +424,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ 
             profile: null,
             loading: false,
+            isFetchingProfile: false,
             error: 'Database tables not set up yet. Please set up your Supabase tables.'
           });
           return;
@@ -421,7 +433,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Check if the error is about no rows returned
         if (error.code === 'PGRST116') {
           console.log('No profile found for user:', currentUser.id);
-          set({ profile: null, loading: false });
+          set({ profile: null, loading: false, isFetchingProfile: false });
           return;
         }
         
@@ -431,13 +443,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.log('Profile data fetched:', data);
       set({ 
         profile: data as UserProfile,
-        loading: false 
+        loading: false,
+        isFetchingProfile: false
       });
     } catch (error) {
       console.error('Error fetching profile:', error);
       set({ 
         error: error instanceof Error ? error.message : 'Failed to fetch profile', 
-        loading: false 
+        loading: false,
+        isFetchingProfile: false
       });
     }
   },

@@ -10,7 +10,8 @@ import {
   ScrollView,
   Dimensions,
   Image,
-  Platform
+  Platform,
+  Alert
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -391,7 +392,11 @@ export const DashboardScreen = () => {
     <View style={styles.container}>
       {/* Header with profile and settings */}
       <View style={[styles.header, Platform.OS === 'android' && styles.headerAndroid]}>
-        <View style={styles.profileSection}>
+        <TouchableOpacity 
+          style={styles.profileSection}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.7}
+        >
           <View style={styles.profileImageContainer}>
             <Text style={styles.profileInitial}>
               {(profile?.name?.charAt(0) || profile?.username?.charAt(0) || 'K').toUpperCase()}
@@ -411,10 +416,10 @@ export const DashboardScreen = () => {
               </Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity 
           style={styles.settingsButton} 
-          onPress={() => navigation.navigate('Profile')}
+          onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.7}
         >
           <View style={styles.settingsIconContainer}>
@@ -422,7 +427,7 @@ export const DashboardScreen = () => {
               name="settings-outline" 
               size={22} 
               color={THEME.primary}
-              style={Platform.OS === 'android' ? { marginLeft: 1 } : {}} // Adjust position on Android
+              style={Platform.OS === 'android' ? { marginLeft: 1 } : {}} 
             />
           </View>
         </TouchableOpacity>
@@ -488,21 +493,6 @@ export const DashboardScreen = () => {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('Notifications')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.actionIconContainer}>
-                <Ionicons 
-                  name="notifications" 
-                  size={20} 
-                  color={THEME.primary} 
-                />
-              </View>
-              <Text style={styles.actionText}>Alerts</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.actionButton}
               onPress={() => {/* Implement analytics functionality */}}
               activeOpacity={0.7}
             >
@@ -514,6 +504,21 @@ export const DashboardScreen = () => {
                 />
               </View>
               <Text style={styles.actionText}>Analytics</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIconContainer}>
+                <Ionicons 
+                  name="notifications-outline" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
+              </View>
+              <Text style={styles.actionText}>Alerts</Text>
             </TouchableOpacity>
           </View>
         </View>
