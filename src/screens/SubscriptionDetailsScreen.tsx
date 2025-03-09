@@ -22,6 +22,7 @@ import { invitationService } from '../services/invitationService';
 import { useAlert } from '../context/AlertContext';
 import { Ionicons } from '@expo/vector-icons';
 import { fontStyles, colors } from '../utils/globalStyles';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Define theme colors consistent with the app
 const THEME = {
@@ -469,13 +470,13 @@ export const SubscriptionDetailsScreen = () => {
           </Text>
         ))}
         <TouchableOpacity
-          style={styles.debugButton}
+          style={styles.debugModalButton}
           onPress={fetchAllUsers}
         >
           <Text style={styles.debugButtonText}>Refresh Users</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.debugButton, { marginTop: 8 }]}
+          style={[styles.debugModalButton, { marginTop: 8 }]}
           onPress={() => setShowDebug(false)}
         >
           <Text style={styles.debugButtonText}>Hide Debug</Text>
@@ -505,8 +506,14 @@ export const SubscriptionDetailsScreen = () => {
 
     return (
       <View style={styles.membersContainer}>
-        {members.map((member) => (
-          <View key={member.user_id} style={styles.memberItem}>
+        {members.map((member, index) => (
+          <View 
+            key={member.user_id} 
+            style={[
+              styles.memberItem,
+              index % 2 === 1 && styles.memberItemAlt
+            ]}
+          >
             <View style={[
               styles.memberAvatar,
               member.isAdmin && styles.adminAvatar
@@ -517,21 +524,32 @@ export const SubscriptionDetailsScreen = () => {
               ]}>
                 {member.users?.username?.charAt(0).toUpperCase() || 'U'}
               </Text>
+              {member.isAdmin && (
+                <View style={styles.adminBadge}>
+                </View>
+              )}
             </View>
             <View style={styles.memberInfo}>
               <Text style={styles.memberName}>
                 {member.users?.name || member.users?.username || 'Unknown User'}
               </Text>
-              <Text style={[
-                styles.memberStatus,
-                member.isAdmin && styles.adminStatus
-              ]}>
-                {member.isAdmin ? 'Admin' : member.status === 'accepted' ? 'Member' : 'Pending'}
-              </Text>
+              <View style={styles.memberStatusContainer}>
+                <View style={[
+                  styles.statusIndicator,
+                  { backgroundColor: member.status === 'accepted' ? '#4CAF50' : '#FFC107' }
+                ]} />
+                <Text style={styles.memberStatus}>
+                  {member.isAdmin ? 'Admin' : member.status === 'accepted' ? 'Member' : 'Pending'}
+                </Text>
+              </View>
             </View>
             {isCurrentUserAdmin && !member.isAdmin && (
-              <TouchableOpacity style={styles.memberActionButton}>
-                <Ionicons name="ellipsis-vertical" size={20} color={THEME.text.tertiary} />
+              <TouchableOpacity 
+                style={styles.memberActionButton}
+                accessibilityLabel="Member options"
+                accessibilityRole="button"
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color={THEME.text.tertiary} />
               </TouchableOpacity>
             )}
           </View>
@@ -599,48 +617,6 @@ export const SubscriptionDetailsScreen = () => {
     );
   }, [subscription, subscriptionId, showAlert, deleteSubscription, navigation]);
 
-  // Add a refresh function to allow users to manually refresh the members list
-  const handleRefresh = useCallback(() => {
-    console.log('Refreshing subscription details and members...');
-    
-    // Reload subscription details
-    const loadSubscription = async () => {
-      setLoading(true);
-      try {
-        // Fetch directly from database to ensure we have the latest data
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('subscription_id', subscriptionId)
-          .single();
-          
-        if (error) {
-          console.error('Error fetching subscription:', error);
-          setError('Failed to load subscription details');
-        } else if (data) {
-          console.log('Subscription refreshed from database:', data);
-          setSubscription(data);
-          
-          // Check if current user is the admin
-          if (currentUserId && data.admin_id) {
-            const adminCheck = currentUserId === data.admin_id;
-            setIsAdmin(adminCheck);
-            console.log('Is current user admin?', adminCheck);
-          }
-        }
-      } catch (err) {
-        console.error('Error in refreshing subscription:', err);
-        setError('An unexpected error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    // Reload subscription details and members
-    loadSubscription();
-    fetchMembers();
-  }, [subscriptionId, currentUserId, fetchMembers]);
-
   if (loading || subscriptionLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -659,18 +635,11 @@ export const SubscriptionDetailsScreen = () => {
           <View style={styles.errorIconContainer}>
             <Ionicons name="alert-circle-outline" size={32} color="#f44336" />
           </View>
-          <Text style={styles.errorTitle}>Error Loading Subscription</Text>
+          <Text style={styles.errorTitle}>Error</Text>
           <Text style={styles.errorText}>{error || subscriptionError}</Text>
           <View style={styles.buttonContainer}>
             <TouchableOpacity
-              style={[styles.actionButton, { marginHorizontal: 8 }]}
-              onPress={handleRefresh}
-            >
-              <Ionicons name="refresh-outline" size={18} color={THEME.text.secondary} style={styles.buttonIcon} />
-              <Text style={styles.actionButtonText}>Retry</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { marginHorizontal: 8 }]}
+              style={styles.actionButton}
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="arrow-back-outline" size={18} color={THEME.text.secondary} style={styles.buttonIcon} />
@@ -727,18 +696,23 @@ export const SubscriptionDetailsScreen = () => {
         <Text style={styles.headerTitle} numberOfLines={1}>{subscription.name}</Text>
         
         <TouchableOpacity 
-          style={styles.refreshButton}
-          onPress={handleRefresh}
+          style={styles.shareButton}
+          onPress={handleShareSubscription}
           accessible={true}
-          accessibilityLabel="Refresh subscription details"
+          accessibilityLabel="Share subscription"
           accessibilityRole="button"
         >
-          <Ionicons name="refresh" size={24} color={THEME.text.primary} />
+          <Ionicons name="share-outline" size={24} color={THEME.text.primary} />
         </TouchableOpacity>
       </View>
       
       <View style={styles.card}>
-        <View style={styles.costSection}>
+        <LinearGradient
+          colors={['rgba(132, 63, 222, 0.08)', 'rgba(132, 63, 222, 0.04)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.costSection}
+        >
           <View style={styles.costHeader}>
             <Text style={styles.costLabel}>Cost</Text>
             <View style={styles.frequencyBadge}>
@@ -747,59 +721,48 @@ export const SubscriptionDetailsScreen = () => {
           </View>
           <Text style={styles.costValue}>{formatCurrency(subscription.cost)}</Text>
           {subscription.renewal_frequency !== 'yearly' && (
-            <View style={styles.annualCostContainer}>
-              <Text style={styles.annualCostText}>
-                {formatCurrency(calculateAnnualCost(subscription))} per year
-              </Text>
-            </View>
+            <Text style={styles.annualCostText}>
+              {formatCurrency(calculateAnnualCost(subscription))} per year
+            </Text>
           )}
-        </View>
+        </LinearGradient>
 
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Category</Text>
           <Text style={styles.detailValue}>{subscription.category}</Text>
         </View>
 
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Start Date</Text>
-          <Text style={styles.detailValue}>{formatDate(subscription.start_date)}</Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Next Renewal</Text>
-          <Text style={styles.detailValue}>{formatDate(subscription.next_renewal_date)}</Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Auto-Renews</Text>
-          <Text style={styles.detailValue}>
-            {subscription.auto_renews ? (
-              <View style={styles.statusContainer}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>Yes</Text>
-              </View>
-            ) : 'No'}
-          </Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Shared</Text>
-          <Text style={styles.detailValue}>
-            {subscription.is_shared ? (
-              <View style={styles.statusContainer}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>Yes</Text>
-              </View>
-            ) : 'No'}
-          </Text>
-        </View>
-
-        {subscription.is_shared && subscription.max_members && (
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Max Members</Text>
-            <Text style={styles.detailValue}>{subscription.max_members}</Text>
+        <View style={styles.dateContainer}>
+          <View style={styles.dateColumn}>
+            <Text style={styles.detailLabel}>Start Date</Text>
+            <Text style={styles.dateValue}>{formatDate(subscription.start_date)}</Text>
           </View>
-        )}
+          <View style={styles.dateColumnRight}>
+            <Text style={styles.detailLabelRight}>Next Renewal</Text>
+            <Text style={styles.dateValueRight}>{formatDate(subscription.next_renewal_date)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.badgeContainer}>
+          {subscription.auto_renews && (
+            <View style={[styles.badge, { backgroundColor: 'rgba(132, 63, 222, 0.08)' }]}>
+              <Ionicons name="checkmark-circle" size={14} color={THEME.primary} />
+              <Text style={styles.badgeText}>Auto-Renews</Text>
+            </View>
+          )}
+          {subscription.is_shared && (
+            <View style={[styles.badge, { backgroundColor: 'rgba(66, 133, 244, 0.08)' }]}>
+              <Ionicons name="people" size={14} color="#4285F4" />
+              <Text style={[styles.badgeText, { color: "#4285F4" }]}>Shared</Text>
+            </View>
+          )}
+          {subscription.is_shared && subscription.max_members && (
+            <View style={[styles.badge, { backgroundColor: 'rgba(52, 168, 83, 0.08)' }]}>
+              <Ionicons name="person" size={14} color="#34A853" />
+              <Text style={[styles.badgeText, { color: "#34A853" }]}>{subscription.max_members} Members</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {subscription.is_shared && (
@@ -808,11 +771,14 @@ export const SubscriptionDetailsScreen = () => {
             <Text style={styles.sectionTitle}>Members</Text>
             {isCurrentUserAdmin && (
               <TouchableOpacity 
-                style={styles.addMemberButton}
+                style={styles.inviteButton}
                 onPress={() => setShowInviteModal(true)}
+                accessible={true}
+                accessibilityLabel="Invite members"
+                accessibilityRole="button"
               >
-                <Ionicons name="person-add" size={16} color="#FFFFFF" style={styles.buttonIcon} />
-                <Text style={styles.addMemberButtonText}>Invite</Text>
+                <Ionicons name="person-add" size={18} color="#FFFFFF" style={styles.buttonIcon} />
+                <Text style={styles.inviteButtonText}>Invite</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -820,70 +786,60 @@ export const SubscriptionDetailsScreen = () => {
         </View>
       )}
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Actions</Text>
-        
-        {isCurrentUserAdmin ? (
-          (() => {
-            console.log('Rendering admin actions, isCurrentUserAdmin:', isCurrentUserAdmin);
-            return (
-              <View>
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => navigation.navigate('EditSubscription', { subscriptionId })}
-                >
-                  <Ionicons name="create-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-                  <Text style={styles.editButtonText}>Edit Subscription</Text>
-                </TouchableOpacity>
+      {isCurrentUserAdmin ? (
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => navigation.navigate('EditSubscription', { subscriptionId })}
+            accessible={true}
+            accessibilityLabel="Edit subscription"
+            accessibilityRole="button"
+          >
+            <View style={styles.buttonInner}>
+              <Ionicons name="create-outline" size={22} color="#FFFFFF" style={styles.buttonIcon} />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </View>
+          </TouchableOpacity>
 
-                {!subscription.is_shared && (
-                  <TouchableOpacity
-                    style={[styles.shareButton, { marginTop: 12 }]}
-                    onPress={handleConvertToShared}
-                  >
-                    <Ionicons name="people-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-                    <Text style={styles.shareButtonText}>Convert to Shared</Text>
-                  </TouchableOpacity>
-                )}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => {
+              console.log('Delete button pressed');
+              showDeleteConfirmation();
+            }}
+            accessible={true}
+            accessibilityLabel="Delete subscription"
+            accessibilityRole="button"
+            accessibilityHint="Permanently removes this subscription"
+          >
+            <View style={styles.buttonInner}>
+              <Ionicons name="trash-outline" size={22} color="#E53935" style={styles.buttonIcon} />
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.noAccessText}>
+          Only the subscription admin can edit or delete this subscription.
+        </Text>
+      )}
 
-                <TouchableOpacity
-                  style={[styles.deleteButton, { marginTop: 12 }]}
-                  onPress={() => {
-                    console.log('Delete button pressed');
-                    showDeleteConfirmation();
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" style={styles.buttonIcon} />
-                  <Text style={styles.deleteButtonText}>Delete Subscription</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, { marginTop: 12 }]}
-                  onPress={() => {
-                    setShowDebug(true);
-                    fetchAllUsers();
-                  }}
-                >
-                  <Ionicons name="code-outline" size={20} color={THEME.text.secondary} style={styles.buttonIcon} />
-                  <Text style={styles.actionButtonText}>Show Debug Info</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })()
-        ) : (
-          <Text style={styles.emptyText}>
-            Only the subscription admin can edit or delete this subscription.
-          </Text>
-        )}
-
-        <TouchableOpacity
-          style={[styles.actionButton, { marginTop: 12 }]}
-          onPress={handleShareSubscription}
-        >
-          <Ionicons name="share-social-outline" size={20} color={THEME.text.secondary} style={styles.buttonIcon} />
-          <Text style={styles.actionButtonText}>Share via Message</Text>
-        </TouchableOpacity>
-      </View>
+      {!subscription.is_shared && isCurrentUserAdmin && (
+        <View style={styles.convertContainer}>
+          <TouchableOpacity
+            style={styles.convertButton}
+            onPress={handleConvertToShared}
+            accessible={true}
+            accessibilityLabel="Convert to shared subscription"
+            accessibilityRole="button"
+          >
+            <View style={styles.buttonInner}>
+              <Ionicons name="people-outline" size={22} color="#FFFFFF" style={styles.buttonIcon} />
+              <Text style={styles.convertButtonText}>Convert to Shared</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {renderDebugView()}
       {renderInviteModal()}
@@ -918,75 +874,51 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginHorizontal: 16,
   },
-  refreshButton: {
+  shareButton: {
     padding: 8,
   },
   card: {
     backgroundColor: THEME.card,
-    borderRadius: 12,
-    padding: 16,
-    margin: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginVertical: 12,
     borderWidth: 1,
     borderColor: THEME.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 0,
-      }
-    })
   },
   costSection: {
-    backgroundColor: THEME.background,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: THEME.text.tertiary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
   },
   costHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   costLabel: {
-    fontFamily: fontStyles.regular,
-    fontSize: 14,
-    color: THEME.text.tertiary,
-  },
-  frequencyBadge: {
-    backgroundColor: THEME.primaryLight,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  frequencyText: {
     fontFamily: fontStyles.medium,
-    fontSize: 12,
+    fontSize: 16,
     color: THEME.primary,
   },
   costValue: {
     fontFamily: fontStyles.semiBold,
     fontSize: 32,
     color: THEME.text.primary,
-    marginVertical: 4,
+    marginBottom: 4,
   },
-  annualCostContainer: {
-    marginTop: 8,
+  frequencyBadge: {
+    backgroundColor: 'rgba(132, 63, 222, 0.15)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  frequencyText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: THEME.primary,
   },
   annualCostText: {
     fontFamily: fontStyles.regular,
@@ -996,25 +928,82 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
   },
+  dateContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
+  },
+  dateColumn: {
+    width: '48%',
+  },
+  dateColumnRight: {
+    width: '48%',
+    alignItems: 'flex-end',
+  },
   detailLabel: {
     fontFamily: fontStyles.regular,
-    fontSize: 16,
+    fontSize: 15,
     color: THEME.text.secondary,
+    marginBottom: 4,
+  },
+  detailLabelRight: {
+    fontFamily: fontStyles.regular,
+    fontSize: 15,
+    color: THEME.text.secondary,
+    marginBottom: 4,
+    textAlign: 'right',
   },
   detailValue: {
     fontFamily: fontStyles.medium,
     fontSize: 16,
     color: THEME.text.primary,
   },
+  dateValue: {
+    fontFamily: fontStyles.medium,
+    fontSize: 16,
+    color: THEME.text.primary,
+  },
+  dateValueRight: {
+    fontFamily: fontStyles.medium,
+    fontSize: 16,
+    color: THEME.text.primary,
+    textAlign: 'right',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 14,
+    gap: 8,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  badgeText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: THEME.primary,
+    marginLeft: 6,
+  },
   sectionTitle: {
     fontFamily: fontStyles.semiBold,
     fontSize: 18,
     color: THEME.text.primary,
     marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   emptyText: {
     fontFamily: fontStyles.regular,
@@ -1023,39 +1012,74 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 16,
   },
-  editButton: {
-    backgroundColor: THEME.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginVertical: 16,
+    gap: 12,
+  },
+  buttonInner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  editButton: {
+    backgroundColor: '#7B3FD9', // Slightly desaturated purple
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#E53935', // Slightly muted red
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   editButtonText: {
     fontFamily: fontStyles.semiBold,
     color: '#FFFFFF',
     fontSize: 16,
-  },
-  shareButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  shareButtonText: {
-    fontFamily: fontStyles.semiBold,
-    color: '#FFFFFF',
-    fontSize: 16,
-  },
-  deleteButton: {
-    backgroundColor: '#f44336',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
+    marginLeft: 8,
   },
   deleteButtonText: {
     fontFamily: fontStyles.semiBold,
+    color: '#E53935', // Matching border color
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  convertContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  convertButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 16, // Matching the other buttons
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  convertButtonText: {
+    fontFamily: fontStyles.semiBold,
     color: '#FFFFFF',
     fontSize: 16,
+    marginLeft: 8,
   },
   actionButton: {
     backgroundColor: THEME.background,
@@ -1118,11 +1142,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  buttonIcon: {
-    marginRight: 8,
-  },
   membersSection: {
-    margin: 16,
+    marginHorizontal: 16,
+    marginVertical: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1132,44 +1154,51 @@ const styles = StyleSheet.create({
   },
   membersContainer: {
     backgroundColor: THEME.card,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: THEME.border,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 0,
-      }
-    })
   },
   memberItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
   },
+  memberItemAlt: {
+    backgroundColor: 'rgba(242, 243, 245, 0.5)',
+  },
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: THEME.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
+    position: 'relative',
   },
   adminAvatar: {
     backgroundColor: THEME.primary,
   },
+  adminBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: THEME.primary,
+    borderRadius: 6,
+    width: 12,
+    height: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
   memberAvatarText: {
     fontFamily: fontStyles.semiBold,
-    fontSize: 16,
+    fontSize: 14,
     color: THEME.primary,
   },
   adminAvatarText: {
@@ -1180,13 +1209,23 @@ const styles = StyleSheet.create({
   },
   memberName: {
     fontFamily: fontStyles.medium,
-    fontSize: 16,
+    fontSize: 15,
     color: THEME.text.primary,
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  memberStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
   },
   memberStatus: {
     fontFamily: fontStyles.regular,
-    fontSize: 14,
+    fontSize: 13,
     color: THEME.text.tertiary,
   },
   adminStatus: {
@@ -1201,16 +1240,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 16,
   },
-  addMemberButton: {
+  inviteButton: {
     backgroundColor: THEME.primary,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addMemberButtonText: {
+  inviteButtonText: {
     fontFamily: fontStyles.medium,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
+    marginLeft: 8,
   },
   modalContainer: {
     flex: 1,
@@ -1310,7 +1353,7 @@ const styles = StyleSheet.create({
     color: THEME.text.tertiary,
     marginBottom: 4,
   },
-  debugButton: {
+  debugModalButton: {
     backgroundColor: THEME.primary,
     borderRadius: 8,
     paddingVertical: 8,
@@ -1340,11 +1383,22 @@ const styles = StyleSheet.create({
     color: THEME.text.primary,
   },
   emptyMembersContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: THEME.background,
+    borderRadius: 12,
   },
   memberActionButton: {
     padding: 8,
+  },
+  noAccessText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: THEME.text.tertiary,
+    fontStyle: 'italic',
+    marginHorizontal: 16,
+    marginVertical: 12,
+    textAlign: 'center',
   },
 }); 
