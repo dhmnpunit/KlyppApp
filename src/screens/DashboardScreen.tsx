@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -7,16 +7,29 @@ import {
   TouchableOpacity, 
   ActivityIndicator,
   Modal,
-  ScrollView
+  ScrollView,
+  Dimensions,
+  Image,
+  Platform,
+  Alert
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { MainStackParamList } from '../navigation/AppNavigator';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { CompositeNavigationProp } from '@react-navigation/native';
+import type { MainStackParamList, MainTabParamList } from '../navigation/AppNavigator';
 import { useSubscriptionStore } from '../store/subscriptionStore';
 import { useAuthStore } from '../store/authStore';
 import { Subscription } from '../store/subscriptionStore';
+import { fontStyles, textStyles, colors } from '../utils/globalStyles';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
-type DashboardScreenNavigationProp = NativeStackNavigationProp<MainStackParamList>;
+// Define a composite navigation type that can navigate both in tabs and stack
+type DashboardScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
+  NativeStackNavigationProp<MainStackParamList>
+>;
 
 // Categories for subscriptions
 const CATEGORIES = [
@@ -41,142 +54,285 @@ const SORT_OPTIONS = [
   { label: 'Recently Added', value: 'recent' }
 ];
 
+// Define theme colors at the top of the file
+const THEME = {
+  primary: colors.primary,
+  primaryLight: 'rgba(132, 63, 222, 0.15)', // Slightly more opaque for better visibility on Android
+  primaryDark: '#6A32B2', // Darker shade of #843FDE
+  text: {
+    primary: '#000000',
+    secondary: '#444444',
+    tertiary: '#888888'
+  },
+  background: '#F2F3F5', // Slightly darker background
+  card: '#FFFFFF',
+  border: '#F0F0F0'
+};
+
 export const DashboardScreen = () => {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { subscriptions, fetchSubscriptions, loading, error } = useSubscriptionStore();
+  const { user, profile, fetchProfile, ensureProfileExists } = useAuthStore();
   const { signOut } = useAuthStore();
-  const [totalCost, setTotalCost] = useState(0);
   
-  // Filtering and sorting state
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [sortOption, setSortOption] = useState('name-asc');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [filteredSubscriptions, setFilteredSubscriptions] = useState<Subscription[]>([]);
-  const [showSortModal, setShowSortModal] = useState(false);
+  const [totalCost, setTotalCost] = useState<number>(0);
+  const [costDifference, setCostDifference] = useState<number>(0);
+  const [showSortModal, setShowSortModal] = useState<boolean>(false);
+  const [sortOption, setSortOption] = useState<string>('cost-high');
+  const [previousMonthCost, setPreviousMonthCost] = useState<number>(0);
+  
+  // Screen width for the chart
+  const screenWidth = Dimensions.get('window').width - 32; // Full width minus padding
 
+  // Colors for the pie chart
+  const chartColors = [
+    '#2E4053', // Dark blue
+    '#3498DB', // Blue
+    '#1ABC9C', // Teal
+    '#F1C40F', // Yellow
+    '#E67E22', // Orange
+    '#E74C3C', // Red
+    '#9B59B6', // Purple
+    '#27AE60', // Green
+    '#95A5A6', // Gray
+  ];
+
+  // Helper function to calculate total monthly cost
+  const calculateTotalCost = (subs: Subscription[]): number => {
+    return subs.reduce((sum, sub) => {
+      // Convert all costs to monthly for consistency
+      let cost = typeof sub.cost === 'string' ? parseFloat(sub.cost) : sub.cost;
+      let monthlyCost = cost;
+      
+      if (sub.renewal_frequency === 'yearly') {
+        monthlyCost = cost / 12;
+      } else if (sub.renewal_frequency === 'quarterly') {
+        monthlyCost = cost / 3;
+      } else if (sub.renewal_frequency === 'weekly') {
+        monthlyCost = cost * 4.33; // Average weeks in a month
+      } else if (sub.renewal_frequency === 'daily') {
+        monthlyCost = cost * 30; // Average days in a month
+      }
+      
+      return sum + monthlyCost;
+    }, 0);
+  };
+  
+  // Helper function to sort subscriptions
+  const sortSubscriptions = (subs: Subscription[], sortBy: string): Subscription[] => {
+    return [...subs].sort((a, b) => {
+      switch (sortBy) {
+        case 'name-asc':
+          return a.name.localeCompare(b.name);
+        case 'name-desc':
+          return b.name.localeCompare(a.name);
+        case 'cost-high':
+          return b.cost - a.cost;
+        case 'cost-low':
+          return a.cost - b.cost;
+        case 'renewal-date':
+          return new Date(a.next_renewal_date).getTime() - new Date(b.next_renewal_date).getTime();
+        case 'recent':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        default:
+          return 0;
+      }
+    });
+  };
+
+  // Calculate the cost difference from the previous month
+  const calculateCostDifference = (subs: Subscription[]) => {
+    // For demo purposes, let's simulate a previous month cost
+    // In a real app, you would fetch this from your backend or calculate it based on historical data
+    
+    // Only recalculate if we haven't done so already or if the total cost has changed
+    if (previousMonthCost === 0 || Math.abs(totalCost - previousMonthCost - costDifference) > 0.01) {
+      // Generate a random previous month cost that's somewhat realistic
+      // This ensures the difference is reasonable (between -20% and +20% of current cost)
+      const variationPercentage = (Math.random() * 0.4) - 0.2; // Random value between -0.2 and 0.2
+      const simulatedPreviousMonthCost = totalCost / (1 + variationPercentage);
+      setPreviousMonthCost(simulatedPreviousMonthCost);
+      
+      // Calculate the difference (current - previous)
+      const difference = totalCost - simulatedPreviousMonthCost;
+      setCostDifference(difference);
+      
+      return difference;
+    }
+    
+    return costDifference;
+  };
+
+  // Use useFocusEffect to refresh subscriptions and profile when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Dashboard screen focused, refreshing data...');
+      fetchSubscriptions();
+      fetchProfile(); // Fetch the user profile when screen is focused
+      return () => {
+        // Cleanup function (optional)
+      };
+    }, [fetchSubscriptions, fetchProfile])
+  );
+
+  // Keep the existing useEffect for initial load
   useEffect(() => {
-    // Fetch subscriptions when the component mounts
+    // Initial fetch when component mounts
     fetchSubscriptions();
+    
+    // Ensure the user profile exists and is loaded
+    ensureProfileExists().then(() => {
+      fetchProfile(); // Fetch the profile after ensuring it exists
+    });
   }, []);
 
   useEffect(() => {
-    // Filter and sort subscriptions whenever subscriptions, category, or sort option changes
-    if (subscriptions.length > 0) {
-      // First, filter by category
-      let filtered = subscriptions;
+    if (subscriptions) {
+      let filtered = [...subscriptions];
+      
+      // Filter by category if not 'All'
       if (selectedCategory !== 'All') {
-        filtered = subscriptions.filter(sub => sub.category === selectedCategory);
+        filtered = filtered.filter(sub => sub.category === selectedCategory);
       }
       
-      // Then, sort according to the selected option
-      const sorted = [...filtered].sort((a, b) => {
-        switch (sortOption) {
-          case 'name-asc':
-            return a.name.localeCompare(b.name);
-          case 'name-desc':
-            return b.name.localeCompare(a.name);
-          case 'cost-asc':
-            return a.cost - b.cost;
-          case 'cost-desc':
-            return b.cost - a.cost;
-          case 'renewal-date':
-            return new Date(a.next_renewal_date).getTime() - new Date(b.next_renewal_date).getTime();
-          case 'recent':
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          default:
-            return 0;
-        }
-      });
+      // Sort subscriptions
+      filtered = sortSubscriptions(filtered, sortOption);
       
-      setFilteredSubscriptions(sorted);
-      
-      // Calculate total monthly cost for filtered subscriptions
-      const total = filtered.reduce((sum, sub) => {
-        // Convert all costs to monthly for consistency
-        let monthlyCost = sub.cost;
-        if (sub.renewal_frequency === 'yearly') {
-          monthlyCost = sub.cost / 12;
-        } else if (sub.renewal_frequency === 'quarterly') {
-          monthlyCost = sub.cost / 3;
-        } else if (sub.renewal_frequency === 'weekly') {
-          monthlyCost = sub.cost * 4.33; // Average weeks in a month
-        } else if (sub.renewal_frequency === 'daily') {
-          monthlyCost = sub.cost * 30; // Average days in a month
-        }
-        return sum + monthlyCost;
-      }, 0);
-      
-      setTotalCost(total);
-    } else {
-      setFilteredSubscriptions([]);
-      setTotalCost(0);
+      setFilteredSubscriptions(filtered);
+      setTotalCost(calculateTotalCost(filtered));
+      setCostDifference(calculateCostDifference(filtered));
     }
   }, [subscriptions, selectedCategory, sortOption]);
 
   const handleAddSubscription = () => {
-    navigation.navigate('AddSubscription');
+    navigation.navigate('SubscriptionsList');
   };
 
   const handleSubscriptionPress = (subscriptionId: string) => {
     navigation.navigate('SubscriptionDetails', { subscriptionId });
   };
 
-  const renderSubscriptionItem = ({ item }: { item: Subscription }) => (
-    <TouchableOpacity 
-      style={styles.subscriptionCard}
-      onPress={() => handleSubscriptionPress(item.subscription_id)}
-    >
-      <View style={styles.subscriptionHeader}>
-        <Text style={styles.subscriptionName}>{item.name}</Text>
-        <Text style={styles.subscriptionCost}>
-          ${item.cost.toFixed(2)}/{item.renewal_frequency}
-        </Text>
-      </View>
-      
-      <View style={styles.subscriptionDetails}>
-        <Text style={styles.subscriptionCategory}>{item.category}</Text>
-        <Text style={styles.subscriptionRenewal}>
-          Next renewal: {new Date(item.next_renewal_date).toLocaleDateString()}
-        </Text>
-      </View>
-      
-      {item.is_shared && (
-        <View style={styles.sharedBadge}>
-          <Text style={styles.sharedText}>Shared</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+  // Update the getCategoryColor function to use our theme color for the default
+  const getCategoryColor = (category: string): string => {
+    switch (category) {
+      case 'Entertainment':
+        return '#FF5757'; // Red
+      case 'Productivity':
+        return '#4A6FFF'; // Blue
+      case 'Utilities':
+        return '#FF9F45'; // Orange
+      case 'Shopping':
+        return THEME.primary; // Our theme color
+      case 'Health & Fitness':
+        return '#50E3C2'; // Teal
+      case 'Education':
+        return '#FFDE59'; // Yellow
+      case 'Food & Drink':
+        return '#7A5AF8'; // Purple
+      case 'Other':
+        return THEME.primary; // Our theme color
+      default:
+        return THEME.primary; // Our theme color
+    }
+  };
 
-  const renderCategoryFilter = () => (
-    <View style={styles.categoryFilterWrapper}>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryFilterContainer}
-        style={styles.categoryFilterScrollView}
+  // Update the renderSubscriptionItem function
+  const renderSubscriptionItem = ({ item }: { item: Subscription }) => {
+    // Format the renewal date
+    const renewalDate = new Date(item.next_renewal_date);
+    const formattedDate = renewalDate.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+    
+    // Calculate days until renewal
+    const today = new Date();
+    const daysUntilRenewal = Math.ceil((renewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const isRenewalSoon = daysUntilRenewal <= 3;
+    
+    // Handle cost properly - item.cost could be a number or string
+    const cost = typeof item.cost === 'string' ? parseFloat(item.cost) : item.cost;
+    
+    return (
+      <TouchableOpacity
+        key={item.subscription_id}
+        style={styles.subscriptionCard}
+        onPress={() => navigation.navigate('SubscriptionDetails', { subscriptionId: item.subscription_id })}
       >
-        {CATEGORIES.map(category => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryFilterButton,
-              selectedCategory === category && styles.categoryFilterButtonSelected
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text 
+        <View style={styles.subscriptionContent}>
+          {/* Main content */}
+          <View style={styles.subscriptionMainContent}>
+            {/* Top row with name and cost */}
+            <View style={styles.subscriptionTopRow}>
+              <View style={styles.subscriptionNameContainer}>
+                <Text style={styles.subscriptionName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                {item.is_shared && (
+                  <View style={styles.sharedBadge}>
+                    <Text style={styles.sharedBadgeText}>Shared</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.subscriptionCost}>${cost.toFixed(2)}</Text>
+            </View>
+            
+            {/* Bottom row with category and renewal */}
+            <View style={styles.subscriptionBottomRow}>
+              <Text style={styles.subscriptionCategory}>{item.category}</Text>
+              <View style={styles.renewalContainer}>
+                <Text style={[
+                  styles.renewalText,
+                  isRenewalSoon && styles.renewalSoonText
+                ]}>
+                  {isRenewalSoon ? 'Renews soon' : 'Renews'}: 
+                  <Text style={[
+                    styles.renewalDate,
+                    isRenewalSoon && styles.renewalSoonDate
+                  ]}> {formattedDate}</Text>
+                  {isRenewalSoon && ` (${daysUntilRenewal} day${daysUntilRenewal !== 1 ? 's' : ''})`}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCategoryFilter = () => {
+    return (
+      <View style={styles.categoryFilterSection}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryFilterScrollContent}
+        >
+          {CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category}
               style={[
-                styles.categoryFilterText,
-                selectedCategory === category && styles.categoryFilterTextSelected
+                styles.categoryPill,
+                selectedCategory === category && styles.categoryPillSelected
               ]}
+              onPress={() => setSelectedCategory(category)}
             >
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
+              <Text
+                style={[
+                  styles.categoryPillText,
+                  selectedCategory === category && styles.categoryPillTextSelected
+                ]}
+              >
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
   const renderSortModal = () => (
     <Modal
@@ -226,7 +382,7 @@ export const DashboardScreen = () => {
   if (loading && subscriptions.length === 0) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008CFF" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading your subscriptions...</Text>
       </View>
     );
@@ -234,92 +390,205 @@ export const DashboardScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>My Subscriptions</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity 
-            style={styles.sortButton}
-            onPress={() => setShowSortModal(true)}
-          >
-            <Text style={styles.sortButtonText}>Sort</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => signOut()}>
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Header with profile and settings */}
+      <View style={[styles.header, Platform.OS === 'android' && styles.headerAndroid]}>
+        <TouchableOpacity 
+          style={styles.profileSection}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.profileImageContainer}>
+            <Text style={styles.profileInitial}>
+              {(profile?.name?.charAt(0) || profile?.username?.charAt(0) || 'K').toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.username}>
+              {profile?.name || profile?.username || 'User'}
+            </Text>
+            <View style={styles.walletAddressContainer}>
+              <Text style={styles.walletAddress}>
+                {(() => {
+                  const userId = user?.id;
+                  if (!userId) return '';
+                  return `${userId.substring(0, 8)}...${userId.substring(userId.length - 4)}`;
+                })()}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.settingsButton} 
+          onPress={() => navigation.navigate('Settings')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingsIconContainer}>
+            <Ionicons 
+              name="settings-outline" 
+              size={22} 
+              color={THEME.primary}
+              style={Platform.OS === 'android' ? { marginLeft: 1 } : {}} 
+            />
+          </View>
+        </TouchableOpacity>
       </View>
       
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Monthly Spending</Text>
-        <Text style={styles.summaryAmount}>${totalCost.toFixed(2)}</Text>
-        <Text style={styles.summarySubtitle}>
-          {filteredSubscriptions.length} active subscription{filteredSubscriptions.length !== 1 ? 's' : ''}
-          {selectedCategory !== 'All' ? ` in ${selectedCategory}` : ''}
-        </Text>
-      </View>
-      
-      {renderCategoryFilter()}
-      
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          {error.includes('Database tables not set up') && (
-            <View style={styles.setupGuideContainer}>
-              <Text style={styles.setupGuideTitle}>Database Setup Guide:</Text>
-              <Text style={styles.setupGuideText}>
-                1. Go to your Supabase project dashboard
-              </Text>
-              <Text style={styles.setupGuideText}>
-                2. Navigate to the SQL Editor
-              </Text>
-              <Text style={styles.setupGuideText}>
-                3. Run the following SQL to create required tables:
-              </Text>
-              <View style={styles.codeBlock}>
-                <Text style={styles.codeText}>
-                  {`-- Create users table\nCREATE TABLE public.users (\n  user_id UUID REFERENCES auth.users(id) PRIMARY KEY,\n  username TEXT UNIQUE,\n  name TEXT,\n  currency TEXT DEFAULT 'USD',\n  theme TEXT DEFAULT 'light',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscriptions table\nCREATE TABLE public.subscriptions (\n  subscription_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  admin_id UUID REFERENCES auth.users(id),\n  name TEXT NOT NULL,\n  cost DECIMAL NOT NULL,\n  renewal_frequency TEXT NOT NULL,\n  start_date DATE NOT NULL,\n  next_renewal_date DATE NOT NULL,\n  category TEXT,\n  auto_renews BOOLEAN DEFAULT TRUE,\n  is_shared BOOLEAN DEFAULT FALSE,\n  max_members INTEGER,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create subscription_members table\nCREATE TABLE public.subscription_members (\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  user_id UUID REFERENCES auth.users(id),\n  status TEXT DEFAULT 'pending',\n  joined_at TIMESTAMP WITH TIME ZONE,\n  PRIMARY KEY (subscription_id, user_id)\n);\n\n-- Create notifications table\nCREATE TABLE public.notifications (\n  notification_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),\n  user_id UUID REFERENCES auth.users(id),\n  subscription_id UUID REFERENCES public.subscriptions(subscription_id),\n  message TEXT NOT NULL,\n  type TEXT NOT NULL,\n  status TEXT DEFAULT 'unread',\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);`}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Main balance card */}
+        <View style={styles.balanceCard}>
+          <Text style={styles.balanceLabel}>Monthly Spending</Text>
+          <View style={styles.balanceRow}>
+            <Text style={styles.balanceAmount}>${totalCost.toFixed(2)}</Text>
+            {costDifference !== 0 && (
+              <View style={[
+                styles.percentageContainer, 
+                costDifference > 0 ? styles.negativePercentage : styles.positivePercentage
+              ]}>
+                <Text style={[
+                  styles.percentageText,
+                  costDifference > 0 ? styles.negativePercentageText : styles.positivePercentageText
+                ]}>
+                  {costDifference > 0 ? '+' : '-'}
+                  {Math.abs(costDifference).toFixed(2)}%
                 </Text>
               </View>
-              <Text style={styles.setupGuideText}>
-                4. Set up Row Level Security (RLS) policies for each table
+            )}
+          </View>
+          
+          {/* Quick action buttons */}
+          <View style={styles.quickActions}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={handleAddSubscription}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIconContainer}>
+                <Ionicons 
+                  name="add" 
+                  size={22} 
+                  color={THEME.primary} 
+                />
+              </View>
+              <Text style={styles.actionText}>Add</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => setShowSortModal(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIconContainer}>
+                <Ionicons 
+                  name="filter" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
+              </View>
+              <Text style={styles.actionText}>Sort</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => {/* Implement analytics functionality */}}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIconContainer}>
+                <Ionicons 
+                  name="stats-chart" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
+              </View>
+              <Text style={styles.actionText}>Analytics</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIconContainer}>
+                <Ionicons 
+                  name="notifications-outline" 
+                  size={20} 
+                  color={THEME.primary} 
+                />
+              </View>
+              <Text style={styles.actionText}>Alerts</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        {/* Category filter as pills */}
+        <View style={styles.categoryFilterSection}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryFilterScrollContent}
+          >
+            {CATEGORIES.map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.categoryPill,
+                  selectedCategory === category && styles.categoryPillSelected
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    selectedCategory === category && styles.categoryPillTextSelected
+                  ]}
+                >
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+        
+        {/* Subscriptions list */}
+        <View style={styles.subscriptionsSection}>
+          <Text style={styles.sectionTitle}>
+            Active Subscriptions
+            <Text style={styles.subscriptionCount}> ({filteredSubscriptions.length})</Text>
+            {filteredSubscriptions.filter(sub => sub.is_shared).length > 0 && (
+              <Text style={styles.sharedCount}> • {filteredSubscriptions.filter(sub => sub.is_shared).length} shared</Text>
+            )}
+          </Text>
+          
+          {filteredSubscriptions.length === 0 ? (
+            <View style={styles.emptySubscriptions}>
+              <Text style={styles.emptySubscriptionsText}>
+                {selectedCategory !== 'All' 
+                  ? `No subscriptions in ${selectedCategory} category` 
+                  : 'No active subscriptions'}
               </Text>
-              <Text style={styles.setupGuideText}>
-                5. Restart the app after setup is complete
-              </Text>
+              <TouchableOpacity 
+                style={styles.emptyAddButton}
+                onPress={handleAddSubscription}
+              >
+                <Text style={styles.emptyAddButtonText}>Add Your First Subscription</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.subscriptionsList}>
+              {filteredSubscriptions.map(item => (
+                <React.Fragment key={item.subscription_id}>
+                  {renderSubscriptionItem({ item })}
+                </React.Fragment>
+              ))}
             </View>
           )}
         </View>
-      )}
-      
-      <FlatList
-        data={filteredSubscriptions}
-        renderItem={renderSubscriptionItem}
-        keyExtractor={item => item.subscription_id}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {selectedCategory !== 'All' 
-                ? `You don't have any subscriptions in the ${selectedCategory} category.` 
-                : "You don't have any subscriptions yet."}
-            </Text>
-            <Text style={styles.emptySubtext}>
-              {selectedCategory !== 'All' 
-                ? 'Try selecting a different category or add a new subscription.' 
-                : 'Add your first subscription to get started!'}
-            </Text>
-          </View>
-        }
-      />
+      </ScrollView>
       
       {renderSortModal()}
-      
-      <TouchableOpacity 
-        style={styles.addButton}
-        onPress={handleAddSubscription}
-      >
-        <Text style={styles.addButtonText}>+ Add Subscription</Text>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -327,236 +596,371 @@ export const DashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
+    backgroundColor: THEME.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingTop: 44, // For status bar
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 10,
+    paddingBottom: 16,
+    height: Platform.OS === 'ios' ? 90 : 105,
+    backgroundColor: THEME.background,
+    borderBottomWidth: 0,
+    borderBottomColor: THEME.border,
+    zIndex: 10,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  headerAndroid: {
+    paddingTop: 45,
+    elevation: 0,
   },
-  headerButtons: {
+  profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  sortButton: {
-    marginRight: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f0f0f0',
+  profileImageContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: THEME.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    ...(Platform.OS === 'ios' 
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }
+      : {
+          elevation: 0,
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.2)',
+          overflow: 'hidden',
+        }
+    )
+  },
+  profileInitial: {
+    fontFamily: fontStyles.bold,
+    fontSize: 18,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    ...Platform.OS === 'android' ? { lineHeight: 24 } : {},
+  },
+  profileInfo: {
+    justifyContent: 'center',
+    height: 40,
+  },
+  username: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 16,
+    color: THEME.text.primary,
+    ...Platform.OS === 'android' ? { lineHeight: 20 } : {},
+  },
+  walletAddressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  walletAddress: {
+    fontFamily: fontStyles.regular,
+    fontSize: 12,
+    color: THEME.text.tertiary,
+    ...Platform.OS === 'android' ? { lineHeight: 16 } : {},
+  },
+  settingsButton: {
+    padding: 8,
+  },
+  settingsIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background to match action buttons
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'ios' 
+      ? {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }
+      : {
+          elevation: 0,
+          borderWidth: 0.5,
+          borderColor: 'rgba(0,0,0,0.05)',
+          overflow: 'hidden',
+        }
+    )
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    padding: 16,
+    paddingTop: 8,
+    paddingBottom: 100,
+  },
+  balanceCard: {
+    backgroundColor: THEME.card,
     borderRadius: 16,
-  },
-  sortButtonText: {
-    color: '#333',
-    fontSize: 14,
-  },
-  signOutText: {
-    color: '#008CFF',
-    fontSize: 16,
-  },
-  summaryCard: {
-    backgroundColor: '#008CFF',
-    borderRadius: 12,
     padding: 20,
+    marginTop: 0,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  summaryTitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  summaryAmount: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
+  balanceLabel: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: THEME.text.tertiary,
     marginBottom: 4,
   },
-  summarySubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  balanceAmount: {
+    fontFamily: fontStyles.bold,
+    fontSize: 36,
+    color: THEME.text.primary,
+    marginRight: 8,
+  },
+  percentageContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  positivePercentage: {
+    backgroundColor: 'rgba(132, 63, 222, 0.1)', // Use our theme color with opacity
+  },
+  negativePercentage: {
+    backgroundColor: 'rgba(231, 76, 60, 0.1)', // Light red
+  },
+  percentageText: {
+    fontFamily: fontStyles.medium,
     fontSize: 14,
   },
-  categoryFilterWrapper: {
-    marginTop: 8,
-    marginBottom: 8,
-    paddingVertical: 0,
+  positivePercentageText: {
+    color: THEME.primary, // Use our theme color
   },
-  categoryFilterContainer: {
-    paddingVertical: 0,
-    marginBottom: 0,
+  negativePercentageText: {
+    color: '#E74C3C', // Red
   },
-  categoryFilterButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingTop: 16,
+    marginHorizontal: -20, // Extend to full width by negating the parent padding
+    paddingHorizontal: 20, // Add padding back to content
+  },
+  actionButton: {
+    alignItems: 'center',
+    width: 60,
+    justifyContent: 'center',
+    height: 80,
+  },
+  actionIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+    // Use platform-specific styling
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 0,
+        borderWidth: 0.5,
+        borderColor: 'rgba(0,0,0,0.05)',
+        overflow: 'hidden',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      }
+    })
+  },
+  actionText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: THEME.text.tertiary,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  categoryFilterSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 18,
+    color: THEME.text.primary,
+    marginBottom: 12,
+  },
+  categoryFilterScrollContent: {
+    paddingBottom: 8,
+  },
+  categoryPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     marginRight: 8,
-    marginVertical: 2,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  categoryFilterButtonSelected: {
-    backgroundColor: '#008CFF',
+  categoryPillSelected: {
+    backgroundColor: THEME.primary,
+    borderWidth: 0,
   },
-  categoryFilterText: {
-    color: '#333',
-    fontSize: 13,
+  categoryPillText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: '#666666',
   },
-  categoryFilterTextSelected: {
-    color: '#fff',
+  categoryPillTextSelected: {
+    color: '#FFFFFF',
   },
-  listContainer: {
-    paddingBottom: 80, // Space for the add button
+  chartSection: {
+    marginBottom: 16,
+  },
+  subscriptionsSection: {
+    marginBottom: 16,
+  },
+  subscriptionCount: {
+    fontFamily: fontStyles.regular,
+    fontSize: 16,
+    color: '#888888',
+  },
+  sharedCount: {
+    fontFamily: fontStyles.regular,
+    fontSize: 16,
+    color: colors.primary,
+  },
+  emptySubscriptions: {
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptySubscriptionsText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 16,
+    color: THEME.text.tertiary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyAddButton: {
+    backgroundColor: THEME.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  emptyAddButtonText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  subscriptionsList: {
+    marginTop: 8,
   },
   subscriptionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: THEME.card,
+    borderRadius: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  subscriptionHeader: {
+  subscriptionContent: {
+    flexDirection: 'row',
+  },
+  subscriptionMainContent: {
+    flex: 1,
+    padding: 16,
+  },
+  subscriptionTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
+  subscriptionNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
   subscriptionName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontFamily: fontStyles.semiBold,
+    fontSize: 17,
+    color: THEME.text.primary,
+    marginRight: 8,
+    flexShrink: 1,
+  },
+  sharedBadge: {
+    backgroundColor: THEME.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  sharedBadgeText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: THEME.primary,
   },
   subscriptionCost: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#008CFF',
+    fontFamily: fontStyles.bold,
+    fontSize: 17,
+    color: THEME.text.primary,
   },
-  subscriptionDetails: {
+  subscriptionBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   subscriptionCategory: {
+    fontFamily: fontStyles.medium,
     fontSize: 14,
-    color: '#666',
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    color: THEME.text.tertiary,
   },
-  subscriptionRenewal: {
-    fontSize: 14,
-    color: '#666',
+  renewalContainer: {
+    alignItems: 'flex-end',
   },
-  sharedBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  sharedText: {
-    color: '#fff',
+  renewalText: {
+    fontFamily: fontStyles.regular,
     fontSize: 12,
-    fontWeight: '500',
+    color: '#888888',
   },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: '#008CFF',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-  },
-  errorContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#f44336',
-    marginBottom: 8,
-  },
-  setupGuideContainer: {
-    marginTop: 16,
-  },
-  setupGuideTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  setupGuideText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  codeBlock: {
-    backgroundColor: '#f5f5f5',
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  codeText: {
+  renewalDate: {
+    fontFamily: fontStyles.medium,
     fontSize: 12,
-    fontFamily: 'monospace',
-    color: '#333',
+    color: '#888888',
+  },
+  renewalSoonText: {
+    color: '#E74C3C',
+  },
+  renewalSoonDate: {
+    color: '#E74C3C',
+    fontFamily: fontStyles.semiBold,
   },
   modalOverlay: {
     flex: 1,
@@ -588,7 +992,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   sortOptionTextSelected: {
-    color: '#008CFF',
+    color: colors.primary,
     fontWeight: '500',
   },
   cancelButton: {
@@ -603,8 +1007,28 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
   },
+  categoryFilterWrapper: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 0,
+  },
+  categoryFilterContainer: {
+    paddingVertical: 0,
+    marginBottom: 0,
+  },
   categoryFilterScrollView: {
     maxHeight: 32,
     marginVertical: 0,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
 }); 

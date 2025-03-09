@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -8,18 +8,41 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Switch
+  Switch,
+  Platform,
+  useColorScheme
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { MainTabParamList } from '../navigation/AppNavigator';
+import type { MainStackParamList } from '../navigation/AppNavigator';
 import { useAuthStore, UserProfile } from '../store/authStore';
 import { supabase } from '../services/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { fontStyles, colors } from '../utils/globalStyles';
+import { useSubscriptionStore } from '../store/subscriptionStore';
 
-type ProfileScreenNavigationProp = NativeStackNavigationProp<MainTabParamList, 'Profile'>;
+// Define theme colors consistent with the app
+const THEME = {
+  primary: colors.primary,
+  primaryLight: 'rgba(132, 63, 222, 0.08)', // Lighter purple background
+  primaryDark: '#6A32B2', // Darker shade of #843FDE
+  text: {
+    primary: '#000000',
+    secondary: '#444444',
+    tertiary: '#888888'
+  },
+  background: '#F2F3F5', // Slightly darker background
+  card: '#FFFFFF',
+  border: '#F0F0F0'
+};
 
-export const ProfileScreen = () => {
-  const navigation = useNavigation<ProfileScreenNavigationProp>();
+type ProfileScreenNavigationProp = NativeStackNavigationProp<MainStackParamList, 'Profile'>;
+
+/**
+ * Custom hook to manage profile state and actions
+ */
+const useProfileManagement = () => {
   const { 
     user, 
     profile, 
@@ -27,506 +50,603 @@ export const ProfileScreen = () => {
     updateProfile, 
     signOut, 
     loading: authLoading, 
-    error,
+    error: authError,
     ensureProfileExists 
   } = useAuthStore();
   
   // Form state
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [formState, setFormState] = useState({
+    name: '',
+    username: '',
+    currency: 'USD',
+    theme: 'light' as 'light' | 'dark' | 'system'
+  });
+  
+  // UI state
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const [error, setError] = useState<string | null>(null);
+  
+  // Initialize form state from profile
   useEffect(() => {
-    // Fetch profile when component mounts
-    console.log('ProfileScreen mounted, fetching profile...');
-    
-    const loadProfile = async () => {
-      try {
-        console.log('Loading profile...');
-        await fetchProfile();
-        
-        // If profile is still not available, ensure it exists
-        if (!profile) {
-          console.log('Profile not found, ensuring it exists...');
-          await ensureProfileExists();
-        }
-      } catch (error) {
-        console.error('Error loading profile:', error);
-      }
-    };
-    
-    loadProfile();
-    
-    // Set up a listener for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-      if (session) {
-        await loadProfile();
-      }
-    });
-    
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // Add a second useEffect to handle the case when the component mounts but profile is not loaded yet
-  useEffect(() => {
-    if (!profile && user && !authLoading && !loading) {
-      console.log('Profile not loaded yet but user exists, ensuring profile exists...');
-      ensureProfileExists();
+    if (profile && !authLoading) {
+      setFormState({
+        name: profile.name || '',
+        username: profile.username || '',
+        currency: profile.currency || 'USD',
+        theme: profile.theme || 'light'
+      });
+      setError(null);
+    } else if (authError) {
+      setError(authError);
     }
-  }, [profile, user, authLoading, loading]);
-
+  }, [profile, authLoading, authError]);
+  
+  // Fetch profile data if needed
   useEffect(() => {
-    // Update form state when profile changes
-    console.log('Profile updated:', profile);
-    if (profile) {
-      setName(profile.name || '');
-      setUsername(profile.username || '');
-      setCurrency(profile.currency);
-      setTheme(profile.theme);
+    if (!profile && !authLoading) {
+      console.log('ProfileScreen: Fetching profile data');
+      fetchProfile();
     }
-  }, [profile]);
-
-  const handleSaveProfile = async () => {
+  }, [profile, authLoading, fetchProfile]);
+  
+  // Handle profile refresh
+  const handleRefreshProfile = useCallback(async () => {
     try {
-      // Validate form
-      if (!username.trim()) {
+      setLoading(true);
+      setError(null);
+      await fetchProfile();
+      
+      if (!profile) {
+        await ensureProfileExists();
+      }
+      
+      setLoading(false);
+      Alert.alert('Success', 'Profile refreshed successfully');
+    } catch (err) {
+      console.error('Error refreshing profile:', err);
+      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to refresh profile');
+      Alert.alert('Error', 'Failed to refresh profile');
+    }
+  }, [fetchProfile, ensureProfileExists, profile]);
+  
+  // Handle profile save
+  const handleSaveProfile = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!formState.username) {
+        setError('Username is required');
+        setLoading(false);
         Alert.alert('Error', 'Username is required');
         return;
       }
-
-      // Check if username is already taken (only if it changed)
-      if (username.trim() !== profile?.username) {
-        console.log('Username changed, checking if already taken');
-        const { data, error } = await supabase
-          .from('users')
-          .select('username')
-          .eq('username', username.trim())
-          .neq('user_id', user?.id || '')
-          .maybeSingle();
-
-        if (data) {
-          console.log('Username already taken:', data);
-          Alert.alert('Error', 'Username is already taken. Please choose another one.');
-          return;
-        }
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error checking username:', error);
-          Alert.alert('Error', 'Failed to check username availability');
-          return;
-        }
-      }
-
-      // Update profile
-      await updateProfile({
-        name: name.trim() || null,
-        username: username.trim(),
-        currency,
-        theme,
-      });
-
+      
+      const updatedProfile: Partial<UserProfile> = {
+        name: formState.name,
+        username: formState.username,
+        currency: formState.currency,
+        theme: formState.theme,
+      };
+      
+      await updateProfile(updatedProfile);
+      
       setIsEditing(false);
+      setLoading(false);
       Alert.alert('Success', 'Profile updated successfully');
-    } catch (error) {
-      console.error('Error updating profile:', error);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
       Alert.alert('Error', 'Failed to update profile');
     }
-  };
-
-  const handleSignOut = async () => {
+  }, [formState, updateProfile]);
+  
+  // Handle sign out
+  const handleSignOut = useCallback(async () => {
     try {
       await signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
+      // Navigation will be handled by the auth state change
+    } catch (err) {
+      console.error('Error signing out:', err);
+      setError(err instanceof Error ? err.message : 'Failed to sign out');
       Alert.alert('Error', 'Failed to sign out');
     }
+  }, [signOut]);
+  
+  return {
+    user,
+    profile,
+    formState,
+    setFormState,
+    isEditing,
+    setIsEditing,
+    loading: loading || authLoading,
+    error: error || authError,
+    handleRefreshProfile,
+    handleSaveProfile,
+    handleSignOut
   };
+};
 
-  const handleRefreshProfile = async () => {
-    console.log('Manually refreshing profile...');
-    try {
-      setLoading(true);
-      await ensureProfileExists();
-      setLoading(false);
+export const ProfileScreen = () => {
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const {
+    user,
+    profile,
+    formState,
+    setFormState,
+    isEditing,
+    setIsEditing,
+    loading,
+    error,
+    handleRefreshProfile,
+    handleSaveProfile,
+    handleSignOut
+  } = useProfileManagement();
+  const { subscriptions, fetchSubscriptions } = useSubscriptionStore();
+  const systemColorScheme = useColorScheme();
+
+  // Calculate subscription stats and trends
+  const subscriptionStats = useMemo(() => {
+    const activeSubscriptions = subscriptions || [];
+    const sharedSubscriptions = activeSubscriptions.filter(sub => sub.is_shared);
+    
+    // Calculate total monthly spending
+    const totalSpending = activeSubscriptions.reduce((sum, sub) => {
+      let monthlyCost = sub.cost;
       
-      if (profile) {
-        Alert.alert('Success', 'Profile refreshed successfully');
-      } else {
-        Alert.alert('Error', 'Unable to load profile. Please try again.');
+      // Convert all costs to monthly
+      switch (sub.renewal_frequency) {
+        case 'yearly':
+          monthlyCost = sub.cost / 12;
+          break;
+        case 'quarterly':
+          monthlyCost = sub.cost / 3;
+          break;
+        case 'weekly':
+          monthlyCost = sub.cost * 4.33; // Average weeks in a month
+          break;
+        case 'daily':
+          monthlyCost = sub.cost * 30; // Average days in a month
+          break;
       }
-    } catch (error) {
-      console.error('Error refreshing profile:', error);
-      setLoading(false);
-      Alert.alert('Error', 'Failed to refresh profile');
-    }
-  };
+      
+      return sum + monthlyCost;
+    }, 0);
 
-  if (authLoading && !profile) {
+    // Calculate previous month's stats
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    const previousMonthSubscriptions = activeSubscriptions.filter(sub => {
+      const startDate = new Date(sub.start_date);
+      return startDate <= oneMonthAgo;
+    });
+    
+    const previousSharedCount = previousMonthSubscriptions.filter(sub => sub.is_shared).length;
+    
+    // Calculate previous month's spending
+    const previousMonthSpending = previousMonthSubscriptions.reduce((sum, sub) => {
+      let monthlyCost = sub.cost;
+      switch (sub.renewal_frequency) {
+        case 'yearly':
+          monthlyCost = sub.cost / 12;
+          break;
+        case 'quarterly':
+          monthlyCost = sub.cost / 3;
+          break;
+        case 'weekly':
+          monthlyCost = sub.cost * 4.33;
+          break;
+        case 'daily':
+          monthlyCost = sub.cost * 30;
+          break;
+      }
+      return sum + monthlyCost;
+    }, 0);
+
+    // Calculate trends
+    const spendingDiff = totalSpending - previousMonthSpending;
+    const spendingTrendPercent = previousMonthSpending ? Math.round((spendingDiff / previousMonthSpending) * 100) : 0;
+    
+    const plansDiff = activeSubscriptions.length - previousMonthSubscriptions.length;
+    const sharedDiff = sharedSubscriptions.length - previousSharedCount;
+
+    return {
+      totalSpending: Math.round(totalSpending * 100) / 100,
+      activeCount: activeSubscriptions.length,
+      sharedCount: sharedSubscriptions.length,
+      spendingTrend: spendingTrendPercent,
+      plansTrend: plansDiff,
+      sharedTrend: sharedDiff
+    };
+  }, [subscriptions]);
+
+  // Fetch subscriptions when component mounts
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [fetchSubscriptions]);
+
+  if (loading && !profile) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#008CFF" />
+        <ActivityIndicator size="large" color={THEME.primary} />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-        <View style={styles.headerButtons}>
-          {!isEditing && (
-            <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.headerButton}>
-              <Text style={styles.editText}>Edit</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={handleRefreshProfile} style={styles.headerButton}>
-            <Text style={styles.refreshText}>Refresh</Text>
-          </TouchableOpacity>
+    <View style={styles.container}>
+            <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <View style={styles.backButtonCircle}>
+          <Ionicons name="arrow-back" size={22} color={THEME.text.primary} />
         </View>
-      </View>
+      </TouchableOpacity>
+      
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.screenTitle}>Profile</Text>
 
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      <View style={styles.card}>
-        <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {username ? username.charAt(0).toUpperCase() : 'U'}
-            </Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{name || 'No name set'}</Text>
-            <Text style={styles.profileEmail}>{user?.email}</Text>
-          </View>
-        </View>
-
-        {isEditing ? (
-          <View style={styles.formContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor="#999"
-            />
-
-            <Text style={styles.label}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Username"
-              placeholderTextColor="#999"
-            />
-
-            <Text style={styles.label}>Currency</Text>
-            <View style={styles.currencyContainer}>
-              {['USD', 'EUR', 'GBP', 'CAD', 'AUD'].map((curr) => (
-                <TouchableOpacity
-                  key={curr}
-                  style={[
-                    styles.currencyButton,
-                    currency === curr && styles.currencyButtonSelected,
-                  ]}
-                  onPress={() => setCurrency(curr)}
-                >
-                  <Text
-                    style={[
-                      styles.currencyButtonText,
-                      currency === curr && styles.currencyButtonTextSelected,
-                    ]}
-                  >
-                    {curr}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.themeContainer}>
-              <Text style={styles.label}>Dark Theme</Text>
-              <Switch
-                value={theme === 'dark'}
-                onValueChange={(value) => setTheme(value ? 'dark' : 'light')}
-                trackColor={{ false: '#ccc', true: '#008CFF' }}
-                thumbColor="#fff"
-              />
-            </View>
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSaveProfile}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setIsEditing(false)}
-                disabled={loading}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.detailsContainer}>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Username</Text>
-              <Text style={styles.detailValue}>{username || 'Not set'}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Currency</Text>
-              <Text style={styles.detailValue}>{currency}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Theme</Text>
-              <Text style={styles.detailValue}>
-                {theme.charAt(0).toUpperCase() + theme.slice(1)}
-              </Text>
-            </View>
+        {error && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={20} color={colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </View>
 
-      <TouchableOpacity
-        style={styles.signOutButton}
-        onPress={handleSignOut}
-        disabled={loading}
-      >
-        <Text style={styles.signOutButtonText}>Sign Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <LinearGradient
+            colors={[THEME.primaryDark, THEME.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.profileGradient}
+          >
+            <View style={styles.profileHeader}>
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>
+                  {profile?.username ? profile.username.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{profile?.name || profile?.username || 'User'}</Text>
+                <Text style={styles.profileEmail}>{user?.email}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        {/* Stats Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={styles.card}>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                <Ionicons name="cash-outline" size={20} color={THEME.primary} />
+              </View>
+                <View>
+                  <Text style={styles.settingText}>Monthly Spend</Text>
+                  <Text style={styles.settingValue}>${subscriptionStats.totalSpending}</Text>
+                </View>
+              </View>
+            </View>
+            
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                <Ionicons name="apps-outline" size={20} color={THEME.primary} />
+              </View>
+                <View>
+                  <Text style={styles.settingText}>Active Plans</Text>
+                  <Text style={styles.settingValue}>{subscriptionStats.activeCount} subscriptions</Text>
+                </View>
+              </View>
+            </View>
+            
+            <View style={[styles.settingItem, styles.settingItemLast]}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                <Ionicons name="people-outline" size={20} color={THEME.primary} />
+              </View>
+                <View>
+                  <Text style={styles.settingText}>Shared Plans</Text>
+                  <Text style={styles.settingValue}>{subscriptionStats.sharedCount} subscriptions</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Account Section */}
+        <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Account</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="person-outline" size={20} color={THEME.primary} />
+                </View>
+                <Text style={styles.settingText}>Username</Text>
+              </View>
+              <View style={styles.settingRight}>
+                <Text style={styles.settingValue}>{profile?.username || 'Not set'}</Text>
+                <Ionicons name="chevron-forward" size={20} color={THEME.text.tertiary} />
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="cash-outline" size={20} color={THEME.primary} />
+                </View>
+                <Text style={styles.settingText}>Currency</Text>
+              </View>
+              <View style={styles.settingRight}>
+                <View style={styles.currencyBadge}>
+                  <Text style={styles.currencyBadgeText}>{profile?.currency || 'USD'}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={THEME.text.tertiary} />
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.settingItem, styles.settingItemLast]}>
+              <View style={styles.settingLeft}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="moon-outline" size={20} color={THEME.primary} />
+                </View>
+                <Text style={styles.settingText}>Dark Mode</Text>
+              </View>
+              <Switch
+                value={profile?.theme === 'dark'}
+                onValueChange={() => {}}
+                trackColor={{ false: '#E9ECEF', true: 'rgba(132, 63, 222, 0.4)' }}
+                thumbColor={profile?.theme === 'dark' ? THEME.primary : '#FFFFFF'}
+                ios_backgroundColor="#E9ECEF"
+              />
+            </TouchableOpacity>
+          </View>
+            </View>
+            
+        {/* Actions Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Actions</Text>
+          <View style={styles.card}>
+            <TouchableOpacity 
+              style={[styles.settingItem, styles.settingItemLast]}
+              onPress={handleSignOut}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.iconContainer, styles.logoutIcon]}>
+                  <Ionicons name="log-out-outline" size={20} color={colors.error} />
+                </View>
+                <Text style={[styles.settingText, styles.logoutText]}>Sign Out</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+          
+          <TouchableOpacity
+            style={styles.deleteAccountButton}
+            onPress={() => Alert.alert(
+              'Delete Account',
+              'Are you sure you want to delete your account? This action cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Delete', 
+                  style: 'destructive',
+                  onPress: () => Alert.alert('Coming Soon', 'Account deletion will be available in a future update.')
+                }
+              ]
+            )}
+          >
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: THEME.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 72 : 44,
+    left: 20,
+    zIndex: 1,
+  },
+  backButtonCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  scrollView: {
+    flex: 1,
   },
-  editText: {
-    color: '#008CFF',
-    fontSize: 16,
-    fontWeight: '500',
+  scrollContent: {
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 124 : 96,
   },
-  card: {
-    backgroundColor: '#fff',
+  screenTitle: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 28,
+    color: THEME.text.primary,
+    marginBottom: 24,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: colors.error,
+    marginLeft: 8,
+    flex: 1,
+  },
+  profileCard: {
     borderRadius: 12,
-    padding: 16,
-    margin: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    marginBottom: 24,
+    overflow: 'hidden',
+    backgroundColor: THEME.card,
+    borderWidth: 1,
+    borderColor: THEME.border,
+  },
+  profileGradient: {
+    padding: 20,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
-  avatar: {
+  avatarContainer: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#008CFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
   avatarText: {
-    color: '#fff',
+    fontFamily: fontStyles.bold,
     fontSize: 24,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontFamily: fontStyles.semiBold,
+    fontSize: 20,
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   profileEmail: {
+    fontFamily: fontStyles.regular,
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  detailsContainer: {
-    marginTop: 8,
+  section: {
+    marginBottom: 24,
   },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  detailLabel: {
+  sectionTitle: {
+    fontFamily: fontStyles.semiBold,
     fontSize: 16,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  formContainer: {
-    marginTop: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  currencyContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 8,
-  },
-  currencyButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  currencyButtonSelected: {
-    backgroundColor: '#008CFF',
-  },
-  currencyButtonText: {
-    color: '#333',
-    fontSize: 14,
-  },
-  currencyButtonTextSelected: {
-    color: '#fff',
-  },
-  themeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  buttonContainer: {
-    marginTop: 24,
-  },
-  saveButton: {
-    backgroundColor: '#008CFF',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
+    color: THEME.text.secondary,
     marginBottom: 12,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  card: {
+    backgroundColor: THEME.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    overflow: 'hidden',
   },
-  cancelButton: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    paddingVertical: 14,
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
+  },
+  settingItemLast: {
+    borderBottomWidth: 0,
+  },
+  settingLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  cancelButtonText: {
-    color: '#333',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  signOutButton: {
-    backgroundColor: '#f44336',
-    borderRadius: 8,
-    paddingVertical: 14,
+  iconContainer: {
+    marginRight: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
     alignItems: 'center',
-    margin: 16,
-    marginTop: 8,
   },
-  signOutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  settingText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 15,
+    color: THEME.text.primary,
+    marginLeft: 0,
+  },
+  settingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingValue: {
+    fontFamily: fontStyles.regular,
+    fontSize: 14,
+    color: THEME.text.tertiary,
+    marginRight: 8,
+  },
+  currencyBadge: {
+    backgroundColor: THEME.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  currencyBadgeText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 12,
+    color: THEME.primary,
+  },
+  logoutIcon: {
+    backgroundColor: 'transparent',
+  },
+  logoutText: {
+    color: colors.error,
+  },
+  deleteAccountButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 32,
+  },
+  deleteAccountText: {
+    fontFamily: fontStyles.medium,
+    fontSize: 14,
+    color: THEME.text.tertiary,
+    textDecorationLine: 'underline',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: THEME.background,
   },
   loadingText: {
+    fontFamily: fontStyles.medium,
     marginTop: 12,
     fontSize: 16,
-    color: '#666',
-  },
-  errorContainer: {
-    backgroundColor: '#ffebee',
-    padding: 12,
-    borderRadius: 8,
-    margin: 16,
-  },
-  errorText: {
-    color: '#d32f2f',
-    fontSize: 14,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerButton: {
-    padding: 8,
-  },
-  refreshText: {
-    color: '#008CFF',
-    fontSize: 16,
-    fontWeight: '500',
+    color: THEME.text.secondary,
   },
 }); 
