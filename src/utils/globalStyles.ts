@@ -80,6 +80,8 @@ export const textStyles = StyleSheet.create({
 // Global color palette
 export const colors = {
   primary: '#843FDE',
+  primaryLight: 'rgba(132, 63, 222, 0.15)',
+  primaryDark: '#6A32B2',
   secondary: '#4CAF50',
   background: '#F8F9FA',
   card: '#FFFFFF',

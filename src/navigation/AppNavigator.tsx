@@ -45,6 +45,7 @@ export type MainTabParamList = {
 
 export type MainStackParamList = {
   MainTabs: undefined;
+  Calendar: undefined;
   SubscriptionsList: undefined;
   AddSubscription: undefined;
   SubscriptionDetails: { subscriptionId: string };

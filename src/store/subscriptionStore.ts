@@ -7,9 +7,10 @@ export interface Subscription {
   admin_id: string;
   name: string;
   cost: number;
-  renewal_frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  renewal_frequency: 'monthly' | 'yearly' | 'weekly';
   start_date: string;
   next_renewal_date: string;
+  trial_end_date?: string | null;
   category: string;
   auto_renews: boolean;
   is_shared: boolean;
