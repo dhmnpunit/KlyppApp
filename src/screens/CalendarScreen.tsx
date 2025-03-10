@@ -9,7 +9,8 @@ import {
   Dimensions,
   PanResponder,
   SafeAreaView,
-  StatusBar
+  StatusBar,
+  Platform
 } from 'react-native';
 import { 
   format, 
@@ -35,6 +36,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, MainStackParamList } from '../navigation/AppNavigator';
 import { Ionicons } from '@expo/vector-icons';
+import { CalendarGrid } from '../components/CalendarGrid';
 
 type CalendarScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Calendar'>,
@@ -45,6 +47,20 @@ type ViewType = 'month' | 'week' | 'day' | 'agenda';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DETAILS_PANEL_HEIGHT = SCREEN_HEIGHT * 0.5;
+
+const THEME = {
+  primary: '#4D7FFF',
+  primaryLight: 'rgba(77, 127, 255, 0.15)',
+  primaryDark: '#3D66CC',
+  text: {
+    primary: '#000000',
+    secondary: '#444444',
+    tertiary: '#888888'
+  },
+  background: '#F2F3F5',
+  card: '#FFFFFF',
+  border: '#F0F0F0'
+};
 
 export const CalendarScreen = () => {
   const navigation = useNavigation<CalendarScreenNavigationProp>();
@@ -151,99 +167,49 @@ export const CalendarScreen = () => {
 
   // Generate days for month view
   const renderMonthView = () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    const startDate = startOfWeek(monthStart);
-    const endDate = endOfWeek(monthEnd);
-    
-    const dateFormat = 'd';
-    const rows = [];
-    
-    let days = [];
-    let day = startDate;
-    let formattedDate = '';
-    
-    // Weekday headers
-    const weekDays = [];
-    const weekDayFormat = 'EEE';
-    for (let i = 0; i < 7; i++) {
-      weekDays.push(
-        <Text key={i} style={styles.weekDayText}>
-          {format(addDays(startDate, i), weekDayFormat)}
-        </Text>
-      );
-    }
-    
-    rows.push(
-      <View key="weekdays" style={styles.weekDayRow}>
-        {weekDays}
-      </View>
-    );
-    
-    // Calendar days
-    while (day <= endDate) {
-      for (let i = 0; i < 7; i++) {
-        formattedDate = format(day, dateFormat);
-        const cloneDay = day;
-        const isCurrentMonth = isSameMonth(day, monthStart);
-        const isSelectedDay = isSameDay(day, selectedDate);
-        const isDayToday = isToday(day);
-        
-        // Count subscriptions for this day
-        const daySubscriptions = subscriptions.filter(sub => {
-          const renewalDate = new Date(sub.next_renewal_date);
-          return isSameDay(renewalDate, cloneDay);
-        });
-        
-        days.push(
-          <TouchableOpacity
-            key={day.toString()}
-            style={[
-              styles.day,
-              !isCurrentMonth && styles.disabledDay,
-              isSelectedDay && styles.selectedDay,
-              isDayToday && styles.today
-            ]}
-            onPress={() => handleDateSelect(cloneDay)}
-          >
-            <Text style={[
-              styles.dayText,
-              !isCurrentMonth && styles.disabledDayText,
-              isSelectedDay && styles.selectedDayText,
-              isDayToday && styles.todayText
-            ]}>
-              {formattedDate}
-            </Text>
-            
-            {daySubscriptions.length > 0 && (
-              <View style={[
-                styles.subscriptionIndicator,
-                isSelectedDay && styles.selectedDayIndicator
-              ]}>
-                <Text style={[
-                  styles.subscriptionCount,
-                  isSelectedDay && styles.selectedDayIndicatorText
-                ]}>
-                  {daySubscriptions.length}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        );
-        day = addDays(day, 1);
-      }
-      
-      rows.push(
-        <View key={day.toString()} style={styles.week}>
-          {days}
-        </View>
-      );
-      days = [];
-    }
-    
     return (
-      <View style={styles.monthContainer}>
-        {rows}
+      <View style={styles.calendarContainer}>
+        <View style={styles.navigationHeader}>
+          <TouchableOpacity 
+            style={styles.monthNavButton}
+            onPress={navigatePrevious}
+          >
+            <Ionicons name="chevron-back" size={24} color={colors.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.monthTodayButton}
+            onPress={navigateToday}
+          >
+            <Text style={styles.monthTodayButtonText}>Today</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.monthNavButton}
+            onPress={navigateNext}
+          >
+            <Ionicons name="chevron-forward" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.calendarWrapper}>
+          <CalendarGrid
+            selectedDate={selectedDate}
+            onDateSelect={(date: Date) => {
+              setSelectedDate(date);
+              
+              // Animate the details panel to show
+              Animated.spring(translateY, {
+                toValue: 0,
+                useNativeDriver: true,
+                bounciness: 4,
+              }).start();
+              
+              lastGestureDy.current = 0;
+            }}
+            subscriptions={subscriptions}
+          />
+        </View>
       </View>
     );
   };
@@ -445,110 +411,43 @@ export const CalendarScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.headerDate}>
-              {format(selectedDate, 'EEEE')}
-            </Text>
-            <Text style={styles.headerTitle}>
-              {format(selectedDate, 'MMMM d, yyyy')}
-            </Text>
-          </View>
-          
-          <View style={styles.headerControls}>
-            <TouchableOpacity 
-              style={styles.todayButton}
-              onPress={navigateToday}
-            >
-              <Text style={styles.todayButtonText}>Today</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.navigationButtons}>
-              <TouchableOpacity 
-                style={styles.navButton}
-                onPress={navigatePrevious}
-              >
-                <Ionicons name="chevron-back" size={20} color={colors.text.primary} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.navButton}
-                onPress={navigateNext}
-              >
-                <Ionicons name="chevron-forward" size={20} color={colors.text.primary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-        
-        {/* View type selector */}
-        <View style={styles.viewSelector}>
-          <TouchableOpacity 
-            style={[styles.viewOption, viewType === 'month' && styles.activeViewOption]}
-            onPress={() => setViewType('month')}
-          >
-            <Text style={[styles.viewOptionText, viewType === 'month' && styles.activeViewOptionText]}>
-              Month
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.viewOption, viewType === 'week' && styles.activeViewOption]}
-            onPress={() => setViewType('week')}
-          >
-            <Text style={[styles.viewOptionText, viewType === 'week' && styles.activeViewOptionText]}>
-              Week
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.viewOption, viewType === 'day' && styles.activeViewOption]}
-            onPress={() => setViewType('day')}
-          >
-            <Text style={[styles.viewOptionText, viewType === 'day' && styles.activeViewOptionText]}>
-              Day
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.viewOption, viewType === 'agenda' && styles.activeViewOption]}
-            onPress={() => setViewType('agenda')}
-          >
-            <Text style={[styles.viewOptionText, viewType === 'agenda' && styles.activeViewOptionText]}>
-              Agenda
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
       {/* Financial summary */}
       <View style={styles.financialSummary}>
-        <View style={styles.summaryLeft}>
-          <Text style={styles.summaryTitle}>Total Subscriptions</Text>
-          <Text style={styles.summaryAmount}>${totalAmount.toFixed(2)}</Text>
-          <Text style={styles.summaryPeriod}>{format(selectedDate, 'MMMM yyyy')}</Text>
-        </View>
-        
-        <View style={styles.summaryRight}>
-          <View style={styles.statItem}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="refresh" size={16} color={colors.primary} />
-            </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statValue}>{renewalsCount}</Text>
-              <Text style={styles.statLabel}>Renewals</Text>
-            </View>
+        <View style={styles.summaryContent}>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryTitle}>Monthly Overview</Text>
+            <Text style={styles.summaryDate}>{format(selectedDate, 'MMMM yyyy')}</Text>
           </View>
           
-          <View style={styles.statItem}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="people" size={16} color={colors.primary} />
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="wallet-outline" size={20} color={THEME.primary} />
+              </View>
+              <View style={styles.statInfo}>
+                <Text style={styles.statLabel}>Total Cost</Text>
+                <Text style={styles.statValue}>${totalAmount.toFixed(2)}</Text>
+              </View>
             </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statValue}>{subscriptions.filter(sub => sub.is_shared).length}</Text>
-              <Text style={styles.statLabel}>Shared</Text>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="refresh" size={20} color={THEME.primary} />
+              </View>
+              <View style={styles.statInfo}>
+                <Text style={styles.statLabel}>Renewals</Text>
+                <Text style={styles.statValue}>{renewalsCount}</Text>
+              </View>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="people" size={20} color={THEME.primary} />
+              </View>
+              <View style={styles.statInfo}>
+                <Text style={styles.statLabel}>Shared</Text>
+                <Text style={styles.statValue}>{subscriptions.filter(sub => sub.is_shared).length}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -572,157 +471,94 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerDate: {
-    fontSize: 16,
-    fontFamily: fontStyles.medium,
-    color: colors.text.tertiary,
-    marginBottom: 4,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontFamily: fontStyles.bold,
-    color: colors.text.primary,
-  },
-  headerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  todayButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.primaryLight,
-    marginRight: 10,
-  },
-  todayButtonText: {
-    fontSize: 14,
-    fontFamily: fontStyles.medium,
-    color: colors.primary,
-  },
-  navigationButtons: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  navButton: {
-    padding: 8,
-    backgroundColor: colors.card,
-  },
-  viewSelector: {
-    flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    padding: 4,
-  },
-  viewOption: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  activeViewOption: {
-    backgroundColor: colors.primary,
-  },
-  viewOptionText: {
-    fontSize: 14,
-    fontFamily: fontStyles.medium,
-    color: colors.text.secondary,
-  },
-  activeViewOptionText: {
-    color: 'white',
-    fontFamily: fontStyles.semiBold,
+    paddingBottom: Platform.OS === 'ios' ? 80 : 60,
   },
   financialSummary: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
     marginHorizontal: 16,
-    marginVertical: 16,
+    marginTop: Platform.OS === 'ios' ? 50 : 20,
+    marginBottom: 16,
     borderRadius: 16,
-    padding: 0,
+    backgroundColor: colors.card,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 4,
-    overflow: 'hidden',
+    elevation: 3,
   },
-  summaryLeft: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: colors.primary,
+  summaryContent: {
+    padding: 16,
+  },
+  summaryHeader: {
+    marginBottom: 16,
   },
   summaryTitle: {
-    fontSize: 14,
-    fontFamily: fontStyles.medium,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 8,
-  },
-  summaryAmount: {
-    fontSize: 28,
-    fontFamily: fontStyles.bold,
-    color: 'white',
+    fontSize: 20,
+    fontFamily: fontStyles.semiBold,
+    color: THEME.text.primary,
     marginBottom: 4,
   },
-  summaryPeriod: {
+  summaryDate: {
     fontSize: 14,
     fontFamily: fontStyles.regular,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: THEME.text.tertiary,
   },
-  summaryRight: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'center',
-  },
-  statItem: {
+  statsGrid: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: -8,
+  },
+  statCard: {
+    flex: 1,
+    marginHorizontal: 8,
+    padding: 12,
+    backgroundColor: THEME.background,
+    borderRadius: 12,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.primaryLight,
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
-  statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  statTextContainer: {
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 16,
-    fontFamily: fontStyles.semiBold,
-    color: colors.text.primary,
-    marginBottom: 2,
+  statInfo: {
+    width: '100%',
   },
   statLabel: {
     fontSize: 13,
-    fontFamily: fontStyles.regular,
-    color: colors.text.tertiary,
+    fontFamily: fontStyles.medium,
+    color: THEME.text.tertiary,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontFamily: fontStyles.bold,
+    color: THEME.text.primary,
   },
   calendarContent: {
     flex: 1,
   },
-  monthContainer: {
-    padding: 12,
+  calendarContainer: {
+    flex: 1,
+    width: '100%',
+    paddingHorizontal: 0,
+  },
+  navigationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 0,
+  },
+  calendarWrapper: {
+    flex: 1,
+    width: '100%',
+    paddingHorizontal: 0,
   },
   weekDayRow: {
     flexDirection: 'row',
@@ -1009,6 +845,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: fontStyles.bold,
     color: colors.primary,
+  },
+  monthNavButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthTodayButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+  },
+  monthTodayButtonText: {
+    color: colors.card,
+    fontFamily: fontStyles.semiBold,
+    fontSize: 14,
   },
 });
 

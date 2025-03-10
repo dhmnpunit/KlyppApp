@@ -8,7 +8,9 @@ import {
 import { fontStyles, colors } from '../utils/globalStyles';
 
 const THEME = {
-  primary: colors.primary,
+  primary: '#4D7FFF',
+  primaryLight: 'rgba(77, 127, 255, 0.15)',
+  primaryDark: '#3D66CC',
   text: {
     primary: '#000000',
     secondary: '#444444',
@@ -36,6 +38,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.background,
+    paddingBottom: Platform.OS === 'ios' ? 80 : 60,
   },
   header: {
     backgroundColor: THEME.card,

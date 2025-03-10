@@ -56,15 +56,15 @@ const SORT_OPTIONS = [
 
 // Define theme colors at the top of the file
 const THEME = {
-  primary: colors.primary,
-  primaryLight: 'rgba(132, 63, 222, 0.15)', // Slightly more opaque for better visibility on Android
-  primaryDark: '#6A32B2', // Darker shade of #843FDE
+  primary: '#4D7FFF',
+  primaryLight: 'rgba(77, 127, 255, 0.15)', // Slightly more opaque for better visibility
+  primaryDark: '#3D66CC', // Darker shade of #4D7FFF
   text: {
     primary: '#000000',
     secondary: '#444444',
     tertiary: '#888888'
   },
-  background: '#F2F3F5', // Slightly darker background
+  background: '#F2F3F5',
   card: '#FFFFFF',
   border: '#F0F0F0'
 };
@@ -271,8 +271,8 @@ export const DashboardScreen = () => {
                   {item.name}
                 </Text>
                 {item.is_shared && (
-                  <View style={styles.sharedBadge}>
-                    <Text style={styles.sharedBadgeText}>Shared</Text>
+                  <View style={styles.sharedIcon}>
+                    <Ionicons name="people" size={16} color="#BBBBBB" />
                   </View>
                 )}
               </View>
@@ -424,7 +424,7 @@ export const DashboardScreen = () => {
         >
           <View style={styles.settingsIconContainer}>
             <Ionicons 
-              name="settings-outline" 
+              name="settings" 
               size={22} 
               color={THEME.primary}
               style={Platform.OS === 'android' ? { marginLeft: 1 } : {}} 
@@ -513,7 +513,7 @@ export const DashboardScreen = () => {
             >
               <View style={styles.actionIconContainer}>
                 <Ionicons 
-                  name="notifications-outline" 
+                  name="notifications" 
                   size={20} 
                   color={THEME.primary} 
                 />
@@ -597,6 +597,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.background,
+    paddingBottom: Platform.OS === 'ios' ? 80 : 60, // Add padding for the tab bar
   },
   header: {
     flexDirection: 'row',
@@ -676,7 +677,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background to match action buttons
+    backgroundColor: 'rgba(77, 127, 255, 0.08)', // Lighter blue background to match action buttons
     justifyContent: 'center',
     alignItems: 'center',
     ...(Platform.OS === 'ios' 
@@ -724,9 +725,10 @@ const styles = StyleSheet.create({
   },
   balanceAmount: {
     fontFamily: fontStyles.bold,
-    fontSize: 36,
+    fontSize: 42,
     color: THEME.text.primary,
     marginRight: 8,
+    fontWeight: '800',
   },
   percentageContainer: {
     paddingHorizontal: 8,
@@ -771,11 +773,10 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(132, 63, 222, 0.08)', // Lighter purple background
+    backgroundColor: 'rgba(77, 127, 255, 0.08)', // Lighter blue background
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
-    // Use platform-specific styling
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -910,27 +911,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   subscriptionName: {
-    fontFamily: fontStyles.semiBold,
-    fontSize: 17,
-    color: THEME.text.primary,
-    marginRight: 8,
-    flexShrink: 1,
-  },
-  sharedBadge: {
-    backgroundColor: THEME.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  sharedBadgeText: {
-    fontFamily: fontStyles.medium,
-    fontSize: 12,
-    color: THEME.primary,
-  },
-  subscriptionCost: {
     fontFamily: fontStyles.bold,
     fontSize: 17,
     color: THEME.text.primary,
+    marginBottom: 0,
+  },
+  sharedIcon: {
+    marginLeft: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 0,
+  },
+  subscriptionCost: {
+    fontFamily: fontStyles.bold,
+    fontSize: 18,
+    color: THEME.primary,
+    marginBottom: 4,
+    fontWeight: '700',
   },
   subscriptionBottomRow: {
     flexDirection: 'row',

@@ -2,10 +2,10 @@ import { StyleSheet } from 'react-native';
 
 // Global font styles to be used throughout the app
 export const fontStyles = {
-  regular: 'Inter_Regular',
-  medium: 'Inter_Medium',
-  semiBold: 'Inter_SemiBold',
-  bold: 'Inter_Bold',
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semiBold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
 };
 
 // Global text styles with consistent typography
@@ -13,20 +13,17 @@ export const textStyles = StyleSheet.create({
   // Headings
   h1: {
     fontFamily: fontStyles.bold,
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 32,
     color: '#000000',
   },
   h2: {
     fontFamily: fontStyles.bold,
     fontSize: 24,
-    lineHeight: 30,
     color: '#000000',
   },
   h3: {
     fontFamily: fontStyles.semiBold,
     fontSize: 20,
-    lineHeight: 26,
     color: '#000000',
   },
   h4: {
@@ -45,15 +42,19 @@ export const textStyles = StyleSheet.create({
   },
   body: {
     fontFamily: fontStyles.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#333333',
+    fontSize: 16,
+    color: '#000000',
   },
   bodySmall: {
     fontFamily: fontStyles.regular,
     fontSize: 12,
     lineHeight: 18,
     color: '#333333',
+  },
+  bodyBold: {
+    fontFamily: fontStyles.semiBold,
+    fontSize: 16,
+    color: '#000000',
   },
   
   // Special text styles
@@ -66,36 +67,34 @@ export const textStyles = StyleSheet.create({
   button: {
     fontFamily: fontStyles.semiBold,
     fontSize: 16,
-    lineHeight: 22,
     color: '#FFFFFF',
   },
   caption: {
     fontFamily: fontStyles.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#666666',
+    fontSize: 14,
+    color: '#888888',
   },
 });
 
 // Global color palette
 export const colors = {
-  primary: '#843FDE',
-  primaryLight: 'rgba(132, 63, 222, 0.15)',
-  primaryDark: '#6A32B2',
+  primary: '#4D7FFF',
+  primaryLight: 'rgba(77, 127, 255, 0.15)',
+  primaryDark: '#3D66CC',
   secondary: '#4CAF50',
-  background: '#F8F9FA',
+  background: '#F2F3F5',
   card: '#FFFFFF',
   text: {
     primary: '#000000',
-    secondary: '#333333',
-    tertiary: '#666666',
+    secondary: '#444444',
+    tertiary: '#888888',
     light: '#999999',
   },
-  border: '#E9ECEF',
-  success: '#2ECC71',
-  error: '#E74C3C',
-  warning: '#F1C40F',
-  info: '#3498DB',
+  border: '#F0F0F0',
+  success: '#34D399',
+  error: '#EF4444',
+  warning: '#FBBF24',
+  info: '#4D7FFF',
 };
 
 // Export a default object with all styles

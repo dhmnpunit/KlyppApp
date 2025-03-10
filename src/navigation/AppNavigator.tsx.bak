@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Platform, StyleSheet, Pressable, Text, Animated, Easing, LayoutChangeEvent, Dimensions } from 'react-native';
+import { View, Platform, StyleSheet, Pressable, Text, Animated } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -28,8 +28,6 @@ import { CalendarScreen } from '../screens/CalendarScreen';
 import { SharedSubscriptionsScreen } from '../screens/SharedSubscriptionsScreen';
 
 // Main app screens
-
-// Define navigation types
 export type AuthStackParamList = {
   Landing: undefined;
   SignUp: undefined;
@@ -45,7 +43,6 @@ export type MainTabParamList = {
 
 export type MainStackParamList = {
   MainTabs: undefined;
-  Calendar: undefined;
   SubscriptionsList: undefined;
   AddSubscription: undefined;
   SubscriptionDetails: { subscriptionId: string };
@@ -55,7 +52,6 @@ export type MainStackParamList = {
   Notifications: undefined;
 };
 
-// Create navigation stacks
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
@@ -66,26 +62,35 @@ type IconName =
   | 'calendar-number'
   | 'people';
 
+// Simple, reliable custom tab bar implementation
 const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
-  // Create a simple implementation with fixed positions
+  // Create animated value for the indicator position
   const translateX = useRef(new Animated.Value(0)).current;
   
   // Update position based on index
   useEffect(() => {
-    const screenWidth = Dimensions.get('window').width;
-    const tabWidth = screenWidth / 3;
-    const position = tabWidth * state.index;
+    let position = 0;
+    
+    // Calculate position based on index
+    if (state.index === 0) {
+      position = 8; // Left padding
+    } else if (state.index === 1) {
+      position = 105; // Middle position
+    } else if (state.index === 2) {
+      position = 202; // Right position
+    }
     
     Animated.timing(translateX, {
       toValue: position,
       duration: 250,
       useNativeDriver: true,
     }).start();
-  }, [state.index, translateX]);
+  }, [state.index]);
 
   return (
     <View style={styles.tabBarContainer}>
       <View style={styles.tabBar}>
+        {/* Animated background indicator */}
         <Animated.View 
           style={[
             styles.activeIndicator,
@@ -111,6 +116,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
             }
           };
 
+          // Get icon name based on route
           let iconName: IconName;
           if (route.name === 'Dashboard') {
             iconName = 'grid';
@@ -131,8 +137,8 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
               <View style={styles.tabContent}>
                 <Ionicons
                   name={iconName}
-                  size={24}
-                  color={isFocused ? '#4D7FFF' : '#888888'}
+                  size={22}
+                  color={isFocused ? '#843FDE' : '#666666'}
                 />
               </View>
             </Pressable>
@@ -143,7 +149,6 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigat
   );
 };
 
-// Main tab navigator
 const MainTabNavigator = () => {
   return (
     <MainTab.Navigator
@@ -151,6 +156,9 @@ const MainTabNavigator = () => {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        tabBarStyle: {
+          display: 'none', // Hide the default tab bar
+        },
       }}
     >
       <MainTab.Screen 
@@ -169,7 +177,6 @@ const MainTabNavigator = () => {
   );
 };
 
-// Auth stack navigator
 const AuthStackNavigator = () => {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
@@ -181,75 +188,36 @@ const AuthStackNavigator = () => {
   );
 };
 
-// Main stack navigator
 const MainStackNavigator = () => {
   return (
-    <MainStack.Navigator>
-      <MainStack.Screen 
-        name="MainTabs" 
-        component={MainTabNavigator} 
-        options={{ headerShown: false }}
-      />
-      <MainStack.Screen 
-        name="Profile" 
-        component={ProfileScreen} 
-        options={{ headerShown: false }}
-      />
-      <MainStack.Screen 
-        name="Settings" 
-        component={SettingsScreen} 
-        options={{ headerShown: false }}
-      />
-      <MainStack.Screen 
-        name="Notifications" 
-        component={NotificationsScreen} 
-        options={{ headerShown: false }}
-      />
-      <MainStack.Screen 
-        name="SubscriptionsList" 
-        component={SubscriptionsListScreen} 
-        options={{ title: 'Subscriptions List' }}
-      />
-      <MainStack.Screen 
-        name="AddSubscription" 
-        component={AddSubscriptionScreen} 
-        options={{ title: 'Add Subscription' }}
-      />
+    <MainStack.Navigator
+      initialRouteName="MainTabs"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <MainStack.Screen name="MainTabs" component={MainTabNavigator} />
+      <MainStack.Screen name="SubscriptionsList" component={SubscriptionsListScreen} />
+      <MainStack.Screen name="AddSubscription" component={AddSubscriptionScreen} />
       <MainStack.Screen 
         name="SubscriptionDetails" 
         component={SubscriptionDetailsScreen} 
-        options={{ title: 'Subscription Details' }}
       />
       <MainStack.Screen 
         name="EditSubscription" 
         component={EditSubscriptionScreen} 
-        options={{ title: 'Edit Subscription' }}
       />
+      <MainStack.Screen name="Profile" component={ProfileScreen} />
+      <MainStack.Screen name="Settings" component={SettingsScreen} />
+      <MainStack.Screen name="Notifications" component={NotificationsScreen} />
     </MainStack.Navigator>
   );
 };
 
 // Root navigator
 export const AppNavigator = () => {
-  const [session, setSession] = useState<Session | null>(null);
-
-  useEffect(() => {
-    // Set up auth state listener
-    try {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (_event, newSession) => {
-          setSession(newSession);
-        }
-      );
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    } catch (error) {
-      console.error('Error setting up auth listener:', error);
-    }
-  }, []);
-
+  const { session } = useAuthStore();
+  
   return (
     <NavigationContainer>
       {session ? <MainStackNavigator /> : <AuthStackNavigator />}
@@ -260,49 +228,53 @@ export const AppNavigator = () => {
 const styles = StyleSheet.create({
   tabBarContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: Platform.OS === 'ios' ? 40 : 24,
+    left: '50%',
+    transform: [{ translateX: -150 }], // Half of the width (300/2)
+    backgroundColor: 'transparent',
     alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
   },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    width: '100%',
-    justifyContent: 'space-around',
+    borderRadius: 30,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    width: 300,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   tabItem: {
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    height: 45,
-    borderRadius: 0,
+    width: 90,
+    height: 40,
+    borderRadius: 20,
     zIndex: 1,
   },
   tabContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
   },
   activeIndicator: {
     position: 'absolute',
-    width: '28%',
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(77, 127, 255, 0.1)',
+    width: 90,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(132, 63, 222, 0.1)', // Light purple background
     zIndex: 0,
-    left: '2.5%',
-    top: 0,
+    left: 0, // We'll use transform for positioning
   },
 }); 

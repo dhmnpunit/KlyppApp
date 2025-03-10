@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
-  TouchableOpacity 
+  TouchableOpacity,
+  Dimensions
 } from 'react-native';
 import { 
   format, 
@@ -59,6 +60,19 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   onDateSelect,
   subscriptions
 }) => {
+  const [cellSize, setCellSize] = useState(0);
+  const screenWidth = Dimensions.get('window').width;
+  
+  // Calculate cell size based on screen width
+  useEffect(() => {
+    // Calculate the available width for the grid (accounting for horizontal margins)
+    const horizontalMargins = 32; // 16px on each side
+    const availableWidth = screenWidth - horizontalMargins;
+    // Divide by 7 for 7 days of the week and ensure it's an integer
+    const calculatedCellSize = Math.floor(availableWidth / 7);
+    setCellSize(calculatedCellSize);
+  }, [screenWidth]);
+
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -91,22 +105,36 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     weeks.push(currentWeek);
   }
 
-  const renderDay = (date: Date) => {
+  const renderDay = (date: Date, isLastRow: boolean, isLastColumn: boolean, dayIndex: number) => {
     const isEmpty = date.getTime() === 0;
     const isSelected = isSameDay(date, selectedDate);
     const isCurrentMonth = isSameMonth(date, selectedDate);
     const isDayToday = isToday(date);
 
     if (isEmpty) {
-      return <View style={styles.emptyDay} />;
+      return (
+        <View 
+          key={`empty-${dayIndex}`}
+          style={[
+            styles.emptyDay,
+            { width: cellSize, height: cellSize },
+            isLastColumn ? styles.lastColumn : null,
+            isLastRow ? styles.lastRow : null
+          ]} 
+        />
+      );
     }
 
     return (
       <TouchableOpacity
+        key={date.toISOString()}
         style={[
           styles.day,
+          { width: cellSize, height: cellSize },
           isSelected && styles.selectedDay,
-          isDayToday && styles.today
+          isDayToday && styles.today,
+          isLastColumn ? styles.lastColumn : null,
+          isLastRow ? styles.lastRow : null
         ]}
         onPress={() => onDateSelect(date)}
       >
@@ -127,79 +155,121 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.weekdayHeader}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
-          <Text key={index} style={styles.weekdayText}>
-            {day}
-          </Text>
-        ))}
-      </View>
+    <View style={styles.outerContainer}>
+      <View style={styles.container}>
+        <View style={styles.calendarContent}>
+          <View style={styles.weekdayHeader}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+              <Text 
+                key={index} 
+                style={[
+                  styles.weekdayText,
+                  { width: cellSize },
+                  index === 6 ? styles.lastWeekdayText : null
+                ]}
+              >
+                {day}
+              </Text>
+            ))}
+          </View>
 
-      <View style={styles.grid}>
-        {weeks.map((week, weekIndex) => (
-          <View key={weekIndex} style={styles.week}>
-            {week.map((day, dayIndex) => (
-              <View key={dayIndex} style={styles.dayContainer}>
-                {renderDay(day)}
+          <View style={styles.grid}>
+            {weeks.map((week, weekIndex) => (
+              <View 
+                key={`week-${weekIndex}`} 
+                style={[
+                  styles.week,
+                  weekIndex === weeks.length - 1 ? styles.lastWeek : null
+                ]}
+              >
+                {week.map((day, dayIndex) => (
+                  renderDay(
+                    day, 
+                    weekIndex === weeks.length - 1, 
+                    dayIndex === 6,
+                    dayIndex
+                  )
+                ))}
               </View>
             ))}
           </View>
-        ))}
+        </View>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    width: '100%',
+  },
   container: {
     backgroundColor: colors.card,
+    width: '100%',
+    overflow: 'hidden',
     borderRadius: 16,
-    margin: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  },
+  calendarContent: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    borderRadius: 16,
   },
   weekdayHeader: {
     flexDirection: 'row',
-    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
   weekdayText: {
-    flex: 1,
     textAlign: 'center',
     fontSize: 13,
     fontFamily: fontStyles.medium,
     color: colors.text.tertiary,
     paddingVertical: 8,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+  },
+  lastWeekdayText: {
+    borderRightWidth: 0,
   },
   grid: {
     flexDirection: 'column',
   },
   week: {
     flexDirection: 'row',
-    height: 68,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  dayContainer: {
-    flex: 1,
-    padding: 2,
+  lastWeek: {
+    borderBottomWidth: 0,
   },
   day: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
     backgroundColor: colors.card,
   },
+  lastColumn: {
+    borderRightWidth: 0,
+  },
+  lastRow: {
+    borderBottomWidth: 0,
+  },
   emptyDay: {
-    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: colors.border,
+    backgroundColor: colors.background,
+    opacity: 0.5,
   },
   selectedDay: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   today: {
+    backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.primary,
   },
@@ -216,7 +286,7 @@ const styles = StyleSheet.create({
     color: colors.text.tertiary,
   },
   selectedDayText: {
-    color: colors.card,
+    color: colors.text.primary,
     fontFamily: fontStyles.semiBold,
   },
   indicators: {
